@@ -13,12 +13,6 @@
             "Tests\\": "tests"
         }
     },
-    "repositories": [
-        {
-            "url": "https://github.com/utopia-php/balancing.git",
-            "type": "git"
-        }
-    ],
     "require": {
         "php": ">=8.0.0",
         "ext-curl": "*",
@@ -29,7 +23,7 @@
         "utopia-php/framework": "0.21.*",
         "utopia-php/cli": "0.13.*",
         "utopia-php/logger": "0.3.*",
-        "utopia-php/balancing": "dev-dev as 0.1.0"
+        "utopia-php/balancing": "0.1.*"
     },
     "require-dev": {
         "swoole/ide-helper": "4.8.5"
