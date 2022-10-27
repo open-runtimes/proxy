@@ -1,0 +1,42 @@
+{
+    "name": "open-runtimes/proxy",
+    "description": "Serverless runtimes proxy to split traffic betwen executors ⚡️",
+    "type": "project",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "OpenRuntimes\\Executor\\": "src/OpenRuntimes/Executor"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests"
+        }
+    },
+    "repositories": [
+        {
+            "url": "https://github.com/utopia-php/balancing.git",
+            "type": "git"
+        }
+    ],
+    "require": {
+        "php": ">=8.0.0",
+        "ext-curl": "*",
+        "ext-imagick": "*",
+        "ext-mbstring": "*",
+        "ext-json": "*",
+        "ext-swoole": "*",
+        "utopia-php/framework": "0.21.*",
+        "utopia-php/cli": "0.13.*",
+        "utopia-php/logger": "0.3.*",
+        "utopia-php/balancing": "dev-dev as 0.1.0"
+    },
+    "require-dev": {
+        "swoole/ide-helper": "4.8.5"
+    },
+    "config": {
+        "platform": {
+            "php": "8.0"
+        }
+    }
+}
