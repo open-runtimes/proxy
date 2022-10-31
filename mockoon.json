@@ -1,0 +1,97 @@
+{
+    "uuid": "b184e781-6aa3-455f-9c91-6ed894051827",
+    "lastMigration": 24,
+    "name": "OprProxy",
+    "endpointPrefix": "",
+    "latency": 0,
+    "port": 80,
+    "hostname": "0.0.0.0",
+    "routes": [
+        {
+            "uuid": "f05373a5-62fa-48dd-b9f3-a785093b996c",
+            "documentation": "",
+            "method": "get",
+            "endpoint": "v1/health",
+            "responses": [
+                {
+                    "uuid": "e69e9ba2-6392-4c05-b5c7-1e4a71d8a19b",
+                    "body": "{\n  \"status\": \"pass\",\n  \"hostUsage\": {{int 0 100}},\n  \"functionsUsage\": {\n    {{#repeat 0 5 comma=true}}\n    \"runtime{{@index}}\": {{int 0 100}}\n    {{/repeat}}\n  }\n}",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true
+                }
+            ],
+            "enabled": true,
+            "responseMode": null
+        },
+        {
+            "uuid": "15068b94-a77e-4362-a20f-24a4904b29ba",
+            "documentation": "",
+            "method": "get",
+            "endpoint": "v1/ping",
+            "responses": [
+                {
+                    "uuid": "2f19044b-ffe3-45f7-974d-128211f061a7",
+                    "body": "{\"ping\":\"pong\"}",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true
+                }
+            ],
+            "enabled": true,
+            "responseMode": null
+        }
+    ],
+    "proxyMode": false,
+    "proxyHost": "",
+    "proxyRemovePrefix": false,
+    "tlsOptions": {
+        "enabled": false,
+        "type": "CERT",
+        "pfxPath": "",
+        "certPath": "",
+        "keyPath": "",
+        "caPath": "",
+        "passphrase": ""
+    },
+    "cors": true,
+    "headers": [
+        {
+            "key": "Content-Type",
+            "value": "application/json"
+        }
+    ],
+    "proxyReqHeaders": [
+        {
+            "key": "",
+            "value": ""
+        }
+    ],
+    "proxyResHeaders": [
+        {
+            "key": "",
+            "value": ""
+        }
+    ],
+    "data": []
+}

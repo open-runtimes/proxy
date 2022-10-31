@@ -7,7 +7,6 @@ use Swoole\Coroutine\Http\Client;
 use Utopia\Logger\Log;
 use Utopia\Logger\Logger;
 use Swoole\Coroutine\Http\Server;
-use function Swoole\Coroutine\run;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
 use Swoole\Runtime;
@@ -16,6 +15,8 @@ use Swoole\Timer;
 use Utopia\App;
 use Utopia\Balancing\Algorithm\Random;
 use Utopia\Balancing\Algorithm\RoundRobin;
+use Utopia\Balancing\Balancing;
+use Utopia\Balancing\Option;
 use Utopia\CLI\Console;
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
@@ -25,11 +26,16 @@ $executorStates->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 
 $executorStates->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
 $executorStates->create();
 
-function markOffline(Table $executorStates, string $executorHostname, string $error, bool $forceShowError = false)
+$roundRobinAtomic = new Atomic(0); // Only used if round-robin algo is used
+
+function markOffline(string $executorHostname, string $error, bool $forceShowError = false): void
 {
+    global $executorStates;
+
     $oldState = $executorStates->exists($executorHostname) ? $executorStates->get($executorHostname) : [];
-    
+
     $state['status'] = 'offline';
+    $state['hostname'] = $executorHostname;
     $state['state'] = \json_encode([]);
     $executorStates->set($executorHostname, $state);
 
@@ -39,27 +45,33 @@ function markOffline(Table $executorStates, string $executorHostname, string $er
     }
 }
 
-function markOnline(Table $executorStates, string $executorHostname, array $state, bool $forceShowError = false)
+/**
+ * @param array<string, mixed> $state
+ */
+function markOnline(string $executorHostname, array $state, bool $forceShowError = false): void
 {
+    global $executorStates;
+
     $oldState = $executorStates->exists($executorHostname) ? $executorStates->get($executorHostname) : [];
-    
-    $state['status'] = 'offline';
+
+    $state['status'] = 'online';
+    $state['hostname'] = $executorHostname;
     $state['state'] = \json_encode($state);
     $executorStates->set($executorHostname, $state);
 
-    if (!$oldState || ($oldState['status'] ?? '') === 'online' || $forceShowError) {
+    if (!$oldState || ($oldState['status'] ?? '') === 'offline' || $forceShowError) {
         Console::success('Executor "' . $executorHostname . '" went online.');
     }
 }
 
-function fetchExecutorsState(Table $executorStates, bool $forceShowError = false)
+function fetchExecutorsState(bool $forceShowError = false): void
 {
     $executors = \explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
 
     foreach ($executors as $executor) {
-        go(function () use ($executor, $forceShowError, $executorStates) {
+        go(function () use ($executor, $forceShowError) {
             try {
-                $endpoint = 'http://' . $executor . ':3000/v1/health';
+                $endpoint = 'http://' . $executor . '/v1/health';
 
                 $ch = \curl_init();
 
@@ -68,8 +80,7 @@ function fetchExecutorsState(Table $executorStates, bool $forceShowError = false
                 \curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                 \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
                 \curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    'Content-Type: application/json',
-                    'x-appwrite-executor-key: ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
+                    'x-open-runtimes-executor-secret: ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
                 ]);
 
                 $executorResponse = \curl_exec($ch);
@@ -78,11 +89,18 @@ function fetchExecutorsState(Table $executorStates, bool $forceShowError = false
 
                 \curl_close($ch);
 
-                if ($statusCode === 200) {
-                    markOnline($executorStates, $executor, \json_decode($executorResponse, true), $forceShowError);
+                if ($statusCode == 200 && !\is_bool($executorResponse)) {
+                    $body = (array) \json_decode($executorResponse, true);
+
+                    if ($body['status'] === 'pass') {
+                        markOnline($executor, $body, $forceShowError);
+                    } else {
+                        $message = 'Response does not include "pass" status.';
+                        markOffline($executor, $message, $forceShowError);
+                    }
                 } else {
                     $message = 'Code: ' . $statusCode . ' with response "' . $executorResponse .  '" and error error: ' . $error;
-                    markOffline($executorStates, $executor, $message, $forceShowError);
+                    markOffline($executor, $message, $forceShowError);
                 }
             } catch (\Exception $err) {
                 throw $err;
@@ -104,7 +122,7 @@ if (!empty($providerName) && !empty($providerConfig) && Logger::hasProvider($pro
     $logger = new Logger($adapter);
 }
 
-function logError(Throwable $error, string $action, Utopia\Route $route = null)
+function logError(Throwable $error, string $action, Utopia\Route $route = null): void
 {
     global $logger;
 
@@ -112,8 +130,8 @@ function logError(Throwable $error, string $action, Utopia\Route $route = null)
         $version = App::getEnv('OPEN_RUNTIMES_PROXY_VERSION', 'UNKNOWN');
 
         $log = new Log();
-        $log->setNamespace("executor");
-        $log->setServer(\gethostname());
+        $log->setNamespace('proxy');
+        $log->setServer(\gethostname() ? \gethostname() : 'unknown');
         $log->setVersion($version);
         $log->setType(Log::TYPE_ERROR);
         $log->setMessage($error->getMessage());
@@ -137,7 +155,7 @@ function logError(Throwable $error, string $action, Utopia\Route $route = null)
         $log->setEnvironment($isProduction ? Log::ENVIRONMENT_PRODUCTION : Log::ENVIRONMENT_STAGING);
 
         $responseCode = $logger->addLog($log);
-        Console::info('Executor log pushed with status code: ' . $responseCode);
+        Console::info('Proxy log pushed with status code: ' . $responseCode);
     }
 
     Console::error('[Error] Type: ' . get_class($error));
@@ -150,17 +168,17 @@ Console::success("Waiting for executors to start...");
 
 \sleep(5);
 
-fetchExecutorsState($executorStates, true);
+fetchExecutorsState(true);
 
 Console::log("State of executors at startup:");
 
-go(function () use($executorStates) {
+go(function () use ($executorStates) {
     $executors = \explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
 
     foreach ($executors as $executor) {
         $state = $executorStates->exists($executor) ? $executorStates->get($executor) : null;
 
-        if($state === null) {
+        if ($state === null) {
             Console::warning("Executor" . $executor . ' has unknown state.');
         } else {
             Console::log('Executor ' . $executor . ' is ' . ($state['status'] ?? 'unknown') . '.');
@@ -170,39 +188,64 @@ go(function () use($executorStates) {
 
 Swoole\Event::wait();
 
-$run = function (SwooleRequest $request, SwooleResponse $response) use ($adapter) {
-    $secretKey = $request->header['x-appwrite-executor-key'] ?? '';
+$run = function (SwooleRequest $request, SwooleResponse $response) {
+    global $executorStates;
+    global $roundRobinAtomic;
+
+    $secretKey = $request->header['x-open-runtimes-proxy-secret'] ?? '';
 
     if (empty($secretKey)) {
-        throw new Exception('Missing proxy key');
+        throw new Exception('Incorrect proxy key.');
     }
     if ($secretKey !== App::getEnv('OPEN_RUNTIMES_PROXY_SECRET', '')) {
-        throw new Exception('Missing proxy key');
+        throw new Exception('Incorrect proxy key.');
     }
 
-    // TODO: @Meldiron Support more algos
+    $roundRobinIndex = $roundRobinAtomic->get() - 1; // Atomic indexes from 1. Balancing library indexes from 0. That's why -1
 
-    $adapterType = App::getEnv('OPEN_RUNTIMES_PROXY_ALGORITHM', '');
-    $adapter = match ($adapterType) {
-        'round-robin' => new RoundRobin(),
+    $algoType = App::getEnv('OPEN_RUNTIMES_PROXY_ALGORITHM', '');
+    $algo = match ($algoType) {
+        'round-robin' => new RoundRobin($roundRobinIndex),
         'random' => new Random(),
         default => new Random()
     };
 
-    if($adapter->getName() === 'RoundRobin') {
-        $roundRobinAtomic = new Atomic(-1);
+    $balancing = new Balancing($algo);
+
+    $balancing->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+
+    foreach ($executorStates as $state) {
+        $balancing->addOption(new Option($state));
     }
 
-    $body = \json_decode($request->getContent(), true);
+    $body = \json_decode($request->getContent() ? $request->getContent() : '{}', true);
     $runtimeId = $body['runtimeId'] ?? null;
-    $executor = $adapter->getNextExecutor($runtimeId);
+    // TODO: @Meldiron Use RuntimeID in CPU-based adapter
 
-    Console::success("Executing on " . $executor['hostname']);
+    $option = $balancing->run();
 
-    $client = new Client($executor['hostname'], 80);
+    if($option === null) {
+        throw new Exception("No online executor found");
+    }
+
+    if ($algo->getName() === 'RoundRobin') {
+        $roundRobinAtomic->cmpset($roundRobinIndex, $algo->getIndex());
+    }
+
+    $executor = [];
+
+    foreach ($option->getStateKeys() as $key) {
+        $executor[$key] = $option->getState($key);
+    }
+
+    $state = \json_decode($executor['state'], true);
+
+    Console::success("Executing on " . $state['hostname']);
+
+    $client = new Client($state['hostname'], 80);
     $client->setMethod($request->server['request_method'] ?? 'GET');
     $client->setHeaders(\array_merge($request->header, [
-        'x-appwrite-executor-key' => App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
+        'x-open-runtimes-executor-secret' => App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
     ]));
     $client->setData($request->getContent());
 
@@ -214,12 +257,12 @@ $run = function (SwooleRequest $request, SwooleResponse $response) use ($adapter
     $response->end();
 };
 
-run(function () use ($executorStates, $run) {
+Co\run(function () use ($run) {
     // TODO: @Meldiron Allow scaling. Only do this on one machine, or only worry about executors on my host machine
 
     // Keep updating executors state
-    Timer::tick((int) App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', 10000), function (int $timerId) use ($executorStates) {
-        fetchExecutorsState($executorStates, false);
+    Timer::tick((int) App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', 10000), function (int $timerId) {
+        fetchExecutorsState(false);
     });
 
     $server = new Server('0.0.0.0', 80, false);

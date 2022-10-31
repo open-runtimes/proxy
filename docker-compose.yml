@@ -11,9 +11,9 @@ services:
     build:
       context: .
     networks:
-      runtimes:
+      servers:
     ports:
-      - 9509:80
+      - 9800:80
     volumes:
       - ./app:/usr/local/app:rw
       - ./tests:/usr/local/tests:rw
@@ -27,6 +27,27 @@ services:
       - OPEN_RUNTIMES_PROXY_SECRET
       - OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER
       - OPEN_RUNTIMES_PROXY_LOGGING_CONFIG
+  mockoon1:
+    container_name: mockoon1
+    image: mockoon/cli:2.2.1
+    command: mockoon-cli start --data /data
+    ports:
+      - 9801:80
+    networks:
+      servers:
+    volumes:
+      - ./mockoon.json:/data:ro
+  mockoon2:
+    container_name: mockoon2
+    image: mockoon/cli:2.2.1
+    command: mockoon-cli start --data /data
+    ports:
+      - 9802:80
+    networks:
+      servers:
+    volumes:
+      - ./mockoon.json:/data:ro
 
 networks:
-  runtimes:
+  servers:
+
