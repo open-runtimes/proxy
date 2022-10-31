@@ -18,6 +18,7 @@ use Utopia\Balancing\Algorithm\RoundRobin;
 use Utopia\Balancing\Balancing;
 use Utopia\Balancing\Option;
 use Utopia\CLI\Console;
+use Utopia\Logger\Adapter;
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
@@ -118,6 +119,10 @@ $logger = null;
 
 if (!empty($providerName) && !empty($providerConfig) && Logger::hasProvider($providerName)) {
     $classname = '\\Utopia\\Logger\\Adapter\\' . \ucfirst($providerName);
+
+    /**
+     * @var Adapter $adapter
+     */
     $adapter = new $classname($providerConfig);
     $logger = new Logger($adapter);
 }
@@ -179,7 +184,7 @@ go(function () use ($executorStates) {
         $state = $executorStates->exists($executor) ? $executorStates->get($executor) : null;
 
         if ($state === null) {
-            Console::warning("Executor" . $executor . ' has unknown state.');
+            Console::warning('Executor ' . $executor . ' has unknown state.');
         } else {
             Console::log('Executor ' . $executor . ' is ' . ($state['status'] ?? 'unknown') . '.');
         }
@@ -201,11 +206,11 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
         throw new Exception('Incorrect proxy key.');
     }
 
-    $roundRobinIndex = $roundRobinAtomic->get() - 1; // Atomic indexes from 1. Balancing library indexes from 0. That's why -1
+    $roundRobinIndex = $roundRobinAtomic->get();
 
     $algoType = App::getEnv('OPEN_RUNTIMES_PROXY_ALGORITHM', '');
     $algo = match ($algoType) {
-        'round-robin' => new RoundRobin($roundRobinIndex),
+        'round-robin' => new RoundRobin($roundRobinIndex - 1), // Atomic indexes from 1. Balancing library indexes from 0. That's why -1
         'random' => new Random(),
         default => new Random()
     };
@@ -224,12 +229,12 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
 
     $option = $balancing->run();
 
-    if($option === null) {
+    if ($option === null) {
         throw new Exception("No online executor found");
     }
 
-    if ($algo->getName() === 'RoundRobin') {
-        $roundRobinAtomic->cmpset($roundRobinIndex, $algo->getIndex());
+    if ($algo instanceof RoundRobin) {
+        $roundRobinAtomic->cmpset($roundRobinIndex, $algo->getIndex() + 1); // +1 because of -1 earlier above
     }
 
     $executor = [];
@@ -244,9 +249,20 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
 
     $client = new Client($state['hostname'], 80);
     $client->setMethod($request->server['request_method'] ?? 'GET');
-    $client->setHeaders(\array_merge($request->header, [
+
+    $headers = \array_merge($request->header, [
         'x-open-runtimes-executor-secret' => App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
-    ]));
+    ]);
+
+    // Header used for testing
+    $isProduction = App::getEnv('OPEN_RUNTIMES_PROXY_ENV', 'development') === 'production';
+    if (!$isProduction) {
+        $headers = \array_merge($request->header, [
+            'x-open-runtimes-executor-hostname' => $state['hostname']
+        ]);
+    }
+
+    $client->setHeaders($headers);
     $client->setData($request->getContent());
 
     $status = $client->execute($request->server['request_uri'] ?? '/');
@@ -257,38 +273,39 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
     $response->end();
 };
 
-Co\run(function () use ($run) {
-    // TODO: @Meldiron Allow scaling. Only do this on one machine, or only worry about executors on my host machine
+/** @phpstan-ignore-next-line */
+Co\run(
+    function () use ($run) {
+        // Keep updating executors state
+        Timer::tick((int) App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', 10000), function (int $timerId) {
+            fetchExecutorsState(false);
+        });
 
-    // Keep updating executors state
-    Timer::tick((int) App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', 10000), function (int $timerId) {
-        fetchExecutorsState(false);
-    });
+        $server = new Server('0.0.0.0', 80, false);
 
-    $server = new Server('0.0.0.0', 80, false);
+        $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($run) {
+            try {
+                call_user_func($run, $swooleRequest, $swooleResponse);
+            } catch (\Throwable $th) {
+                logError($th, "serverError");
 
-    $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($run) {
-        try {
-            call_user_func($run, $swooleRequest, $swooleResponse);
-        } catch (\Throwable $th) {
-            logError($th, "serverError");
+                $output = [
+                    'message' => 'Error: ' . $th->getMessage(),
+                    'code' => 500,
+                    'file' => $th->getFile(),
+                    'line' => $th->getLine(),
+                    'trace' => $th->getTrace()
+                ];
 
-            $output = [
-                'message' => 'Error: ' . $th->getMessage(),
-                'code' => 500,
-                'file' => $th->getFile(),
-                'line' => $th->getLine(),
-                'trace' => $th->getTrace()
-            ];
+                $swooleResponse->setStatusCode(500);
+                $swooleResponse->header('content-type', 'application/json; charset=UTF-8');
+                $swooleResponse->write(\json_encode($output));
+                $swooleResponse->end();
+            }
+        });
 
-            $swooleResponse->setStatusCode(500);
-            $swooleResponse->header('content-type', 'application/json; charset=UTF-8');
-            $swooleResponse->write(\json_encode($output));
-            $swooleResponse->end();
-        }
-    });
+        Console::success("Functions proxy is ready.");
 
-    Console::success("Functions proxy is ready.");
-
-    $server->start();
-});
+        $server->start();
+    }
+);
