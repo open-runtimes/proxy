@@ -14,7 +14,19 @@ jobs:
 
     - run: git checkout HEAD^2
 
+    - name: Start Test Stack
+      run:  |
+        export COMPOSE_INTERACTIVE_NO_CLI
+        export DOCKER_BUILDKIT=1
+        export COMPOSE_DOCKER_CLI_BUILD=1
+        export BUILDKIT_PROGRESS=plain
+        docker pull composer:2.0
+        docker compose build
+        docker compose up -d
+        sleep 15
+
+    - name: Doctor
+      run: docker ps
+
     - name: Run Tests
-      run: |
-        docker run --rm -v $PWD:/app composer sh -c \
-        "composer install --profile --ignore-platform-reqs && composer test"
+      run: "docker compose exec -T openruntimes-proxy composer test"

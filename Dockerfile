@@ -18,6 +18,10 @@ COPY ./tests /usr/local/tests
 
 COPY --from=composer /usr/local/src/vendor /usr/local/vendor
 
+# For running tests in Docker container
+COPY composer.json /usr/local/composer.json
+COPY phpunit.xml /usr/local/phpunit.xml
+
 EXPOSE 80
 
 CMD [ "php", "app/http.php" ]
