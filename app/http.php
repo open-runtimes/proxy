@@ -200,10 +200,10 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
     $secretKey = $request->header['x-open-runtimes-proxy-secret'] ?? '';
 
     if (empty($secretKey)) {
-        throw new Exception('Incorrect proxy key.');
+        throw new Exception('Incorrect proxy key.', 401);
     }
     if ($secretKey !== App::getEnv('OPEN_RUNTIMES_PROXY_SECRET', '')) {
-        throw new Exception('Incorrect proxy key.');
+        throw new Exception('Incorrect proxy key.', 401);
     }
 
     $roundRobinIndex = $roundRobinAtomic->get();
@@ -230,7 +230,7 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
     $option = $balancing->run();
 
     if ($option === null) {
-        throw new Exception("No online executor found");
+        throw new Exception("No online executor found", 404);
     }
 
     if ($algo instanceof RoundRobin) {
@@ -257,7 +257,7 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
     // Header used for testing
     $isProduction = App::getEnv('OPEN_RUNTIMES_PROXY_ENV', 'development') === 'production';
     if (!$isProduction) {
-        $headers = \array_merge($request->header, [
+        $headers = \array_merge($headers, [
             'x-open-runtimes-executor-hostname' => $state['hostname']
         ]);
     }
@@ -287,17 +287,19 @@ Co\run(
             try {
                 call_user_func($run, $swooleRequest, $swooleResponse);
             } catch (\Throwable $th) {
+                $code = $th->getCode();
+                $code = $code === 0 ? 500 : $code;
                 logError($th, "serverError");
 
                 $output = [
                     'message' => 'Error: ' . $th->getMessage(),
-                    'code' => 500,
+                    'code' => $code,
                     'file' => $th->getFile(),
                     'line' => $th->getLine(),
                     'trace' => $th->getTrace()
                 ];
 
-                $swooleResponse->setStatusCode(500);
+                $swooleResponse->setStatusCode($code);
                 $swooleResponse->header('content-type', 'application/json; charset=UTF-8');
                 $swooleResponse->write(\json_encode($output));
                 $swooleResponse->end();
