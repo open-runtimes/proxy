@@ -6,17 +6,12 @@ use PHPUnit\Framework\TestCase;
 
 class HTTPTest extends TestCase
 {
-    private ?Client $client;
+    private Client $client;
 
     protected function setUp(): void
     {
         $this->client = new Client();
         $this->client->setEndpoint("http://localhost/");
-    }
-
-    protected function tearDown(): void
-    {
-        $this->client = null;
     }
 
     public function testBalancing(): void
@@ -46,7 +41,7 @@ class HTTPTest extends TestCase
         $server2 = $response['body']['server'];
 
         // Ensure round-robin split traffic
-        $this->assertNotEquals($server1, $server2); 
+        $this->assertNotEquals($server1, $server2);
 
         $response = $this->client->call(Client::METHOD_GET, "/v1/ping", [
             'x-open-runtimes-proxy-secret' => 'wrong-secret-key'
