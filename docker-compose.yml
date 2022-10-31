@@ -38,6 +38,7 @@ services:
   mockoon2:
     container_name: mockoon2
     image: mockoon/cli:2.2.1
+    command: mockoon-cli start --data /data
     networks:
       servers:
     volumes:
