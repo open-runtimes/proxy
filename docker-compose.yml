@@ -31,8 +31,6 @@ services:
     container_name: mockoon1
     image: mockoon/cli:2.2.1
     command: mockoon-cli start --data /data
-    ports:
-      - 9801:80
     networks:
       servers:
     volumes:
@@ -40,9 +38,6 @@ services:
   mockoon2:
     container_name: mockoon2
     image: mockoon/cli:2.2.1
-    command: mockoon-cli start --data /data
-    ports:
-      - 9802:80
     networks:
       servers:
     volumes:
