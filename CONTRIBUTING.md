@@ -4,7 +4,7 @@ We would ❤️ for you to contribute to Open Runtimes and help make it better! 
 
 ## How to Start?
 
-If you are worried or don’t know where to start, check out our next section explaining what kind of help we could use and where can you get involved. You can reach out with questions to [Eldad Fux (@eldadfux)](https://twitter.com/eldadfux) or anyone from the [Appwrite team on Discord](https://appwrite.io/discord). You can also submit an issue, and a maintainer can guide you!
+If you are worried or don’t know where to start, check out our next section explaining what kind of help we could use and where can you get involved. You can reach out with questions to [Eldad Fux (@eldadfux)](https://twitter.com/eldadfux) or anyone from the [Open Runtimes team on Discord](https://discord.gg/mkZcevnxuf). You can also submit an issue, and a maintainer can guide you!
 
 ## Code of Conduct
 
@@ -136,7 +136,7 @@ Presenting at meetups and conferences about your Open Runtimes projects. Your un
 
 ### Sending Feedbacks & Reporting Bugs
 
-Sending feedback is a great way for us to understand your different use cases of Open Runtimes better. If you had any issues, bugs, or want to share about your experience, feel free to do so on our GitHub issues page or at our [Discord channel](https://appwrite.io/discord).
+Sending feedback is a great way for us to understand your different use cases of Open Runtimes better. If you had any issues, bugs, or want to share about your experience, feel free to do so on our GitHub issues page or at our [Discord channel](https://discord.gg/mkZcevnxuf).
 
 ### Submitting New Ideas
 
