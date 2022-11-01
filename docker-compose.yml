@@ -16,6 +16,7 @@ services:
       - 9800:80
     volumes:
       - ./app:/usr/local/app:rw
+      - ./src:/usr/local/src:rw
       - ./tests:/usr/local/tests:rw
     environment:
       - OPEN_RUNTIMES_PROXY_ALGORITHM

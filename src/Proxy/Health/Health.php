@@ -4,6 +4,8 @@ namespace OpenRuntimes\Proxy\Health;
 
 use Utopia\App;
 
+use function Swoole\Coroutine\batch;
+
 class Health
 {
     /**
@@ -19,8 +21,10 @@ class Health
 
     public function run(): self
     {
+        $callables = [];
+
         foreach ($this->nodes as $node) {
-            go(function () use ($node) {
+            $callables[] = function () use ($node) {
                 try {
                     $endpoint = 'http://' . $node->getHostname() . '/v1/health';
 
@@ -59,8 +63,10 @@ class Health
                 } catch (\Exception $err) {
                     throw $err;
                 }
-            });
+            };
         }
+
+        batch($callables);
 
         return $this;
     }

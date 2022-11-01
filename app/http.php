@@ -25,23 +25,34 @@ use Utopia\Logger\Adapter\AppSignal;
 use Utopia\Logger\Adapter\LogOwl;
 use Utopia\Logger\Adapter\Raygun;
 use Utopia\Logger\Adapter\Sentry;
+use Utopia\Registry\Registry;
+use Utopia\Swoole\Request;
+use Utopia\Swoole\Response;
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
-$executorsCount = \count(\explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', '')));
-$executorStates = new Table($executorsCount);
-$executorStates->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
-$executorStates->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
-$executorStates->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
-$executorStates->create();
+$register = new Registry();
 
-$roundRobinAtomic = new Atomic(0); // Only used if round-robin algo is used
+$register->set('executorStates', function () {
+    $executorsCount = \count(\explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', '')));
+    $executorStates = new Table($executorsCount);
+    $executorStates->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
+    $executorStates->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
+    $executorStates->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
+    $executorStates->create();
+    return $executorStates;
+});
+
+// Only used if round-robin algo is used
+$register->set('roundRobinAtomic', fn () => new Atomic(0));
 
 function fetchExecutorsState(bool $forceShowError = false): void
 {
-    global $executorStates;
+    global $register;
 
-    $executors = \explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
+    $executorStates = $register->get('executorStates');
+
+    $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
 
     $health = new Health();
 
@@ -94,7 +105,7 @@ function logError(Throwable $error, string $action, Utopia\Route $route = null):
     global $logger;
 
     if ($logger) {
-        $version = App::getEnv('OPEN_RUNTIMES_PROXY_VERSION', 'UNKNOWN');
+        $version = (string) App::getEnv('OPEN_RUNTIMES_PROXY_VERSION', 'UNKNOWN');
 
         $log = new Log();
         $log->setNamespace('proxy');
@@ -133,30 +144,38 @@ function logError(Throwable $error, string $action, Utopia\Route $route = null):
 
 Console::success('Waiting for executors to start...');
 
-$startupDelay = (int) App::getEnv('OPEN_RUNTIMES_PROXY_STARTUP_DELAY', 0);
+$startupDelay = \intval(App::getEnv('OPEN_RUNTIMES_PROXY_STARTUP_DELAY', '0'));
 if ($startupDelay > 0) {
     \sleep((int) ($startupDelay / 1000));
 }
 
-if (App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
-    fetchExecutorsState(true);
-} else {
-    // If no health check, mark all as online
-    $executors = \explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
+\go(function () use ($register) {
+    if (App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
+        fetchExecutorsState(true);
+    } else {
+        $executorStates = $register->get('executorStates');
 
-    foreach ($executors as $executor) {
-        $executorStates->set($executor, [
-            'status' => 'online',
-            'hostname' => $executor,
-            'state' =>  \json_encode([])
-        ]);
+        // If no health check, mark all as online
+        $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
+
+        foreach ($executors as $executor) {
+            $executorStates->set($executor, [
+                'status' => 'online',
+                'hostname' => $executor,
+                'state' =>  \json_encode([])
+            ]);
+        }
     }
-}
+});
 
 Console::log('State of executors at startup:');
 
-go(function () use ($executorStates) {
-    $executors = \explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
+go(function () {
+    global $register;
+
+    $executorStates = $register->get('executorStates');
+
+    $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
 
     foreach ($executors as $executor) {
         $state = $executorStates->exists($executor) ? $executorStates->get($executor) : null;
@@ -171,103 +190,167 @@ go(function () use ($executorStates) {
 
 Swoole\Event::wait();
 
-$run = function (SwooleRequest $request, SwooleResponse $response) {
-    global $executorStates;
-    global $roundRobinAtomic;
+// Wildcard action
+App::error()
+    ->inject('request')
+    ->inject('response')
+    ->inject('roundRobinAtomic')
+    ->inject('executorStates')
+    ->action(function (Request $request, Response $response, Atomic $roundRobinAtomic, Table $executorStates) {
+        $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
 
-    $secretKey = \explode(' ', $request->header['authorization'] ?? '')[1] ?? '';
+        if (empty($secretKey)) {
+            throw new Exception('Incorrect proxy key.', 401);
+        }
+        if ($secretKey !== App::getEnv('OPEN_RUNTIMES_PROXY_SECRET', '')) {
+            throw new Exception('Incorrect proxy key.', 401);
+        }
 
-    if (empty($secretKey)) {
-        throw new Exception('Incorrect proxy key.', 401);
-    }
-    if ($secretKey !== App::getEnv('OPEN_RUNTIMES_PROXY_SECRET', '')) {
-        throw new Exception('Incorrect proxy key.', 401);
-    }
+        $roundRobinIndex = $roundRobinAtomic->get();
 
-    $roundRobinIndex = $roundRobinAtomic->get();
+        $algoType = App::getEnv('OPEN_RUNTIMES_PROXY_ALGORITHM', '');
+        $algo = match ($algoType) {
+            'round-robin' => new RoundRobin($roundRobinIndex - 1), // Atomic indexes from 1. Balancing library indexes from 0. That's why -1
+            'random' => new Random(),
+            default => new Random()
+        };
 
-    $algoType = App::getEnv('OPEN_RUNTIMES_PROXY_ALGORITHM', '');
-    $algo = match ($algoType) {
-        'round-robin' => new RoundRobin($roundRobinIndex - 1), // Atomic indexes from 1. Balancing library indexes from 0. That's why -1
-        'random' => new Random(),
-        default => new Random()
-    };
+        $balancing = new Balancing($algo);
 
-    $balancing = new Balancing($algo);
+        $balancing->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
-    $balancing->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+        foreach ($executorStates as $state) {
+            $balancing->addOption(new Option($state));
+        }
 
-    foreach ($executorStates as $state) {
-        $balancing->addOption(new Option($state));
-    }
+        $body = \json_decode($request->getRawPayload() ? $request->getRawPayload() : '{}', true);
+        $runtimeId = $body['runtimeId'] ?? null;
+        // TODO: @Meldiron Use RuntimeID in CPU-based adapter
 
-    $body = \json_decode($request->getContent() ? $request->getContent() : '{}', true);
-    $runtimeId = $body['runtimeId'] ?? null;
-    // TODO: @Meldiron Use RuntimeID in CPU-based adapter
+        $option = $balancing->run();
 
-    $option = $balancing->run();
+        if ($option === null) {
+            throw new Exception('No online executor found', 404);
+        }
 
-    if ($option === null) {
-        throw new Exception('No online executor found', 404);
-    }
+        if ($algo instanceof RoundRobin) {
+            $roundRobinAtomic->cmpset($roundRobinIndex, $algo->getIndex() + 1); // +1 because of -1 earlier above
+        }
 
-    if ($algo instanceof RoundRobin) {
-        $roundRobinAtomic->cmpset($roundRobinIndex, $algo->getIndex() + 1); // +1 because of -1 earlier above
-    }
+        $executor = [];
 
-    $executor = [];
+        foreach ($option->getStateKeys() as $key) {
+            $executor[$key] = $option->getState($key);
+        }
 
-    foreach ($option->getStateKeys() as $key) {
-        $executor[$key] = $option->getState($key);
-    }
+        Console::success('Executing on ' . $executor['hostname']);
 
-    Console::success('Executing on ' . $executor['hostname']);
+        $client = new Client($executor['hostname'], 80);
+        $client->setMethod($request->getMethod());
 
-    $client = new Client($executor['hostname'], 80);
-    $client->setMethod($request->server['request_method'] ?? 'GET');
-
-    $headers = \array_merge($request->header, [
-        'authorization' => 'Bearer ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
-    ]);
-
-    // Header used for testing
-    $isProduction = App::getEnv('OPEN_RUNTIMES_PROXY_ENV', 'development') === 'production';
-    if (!$isProduction) {
-        $headers = \array_merge($headers, [
-            'x-open-runtimes-executor-hostname' => $executor['hostname']
+        $headers = \array_merge($request->getHeaders(), [
+            'authorization' => 'Bearer ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
         ]);
-    }
 
-    $client->setHeaders($headers);
-    $client->setData($request->getContent());
+        // Header used for testing
+        $isProduction = App::getEnv('OPEN_RUNTIMES_PROXY_ENV', 'development') === 'production';
+        if (!$isProduction) {
+            $headers = \array_merge($headers, [
+                'x-open-runtimes-executor-hostname' => $executor['hostname']
+            ]);
+        }
 
-    $status = $client->execute($request->server['request_uri'] ?? '/');
+        $client->setHeaders($headers);
+        $client->setData($request->getRawPayload());
+        $client->execute($request->getURI());
 
-    $response->setStatusCode($client->getStatusCode());
-    $response->header('content-type', 'application/json; charset=UTF-8');
-    $response->write($client->getBody());
-    $response->end();
-};
+        $response
+            ->setStatusCode($client->getStatusCode())
+            ->json(\json_decode($client->getBody(), true));
+    });
+
+// TODO: @Meldiron Uncomment once utopia framework supports wildcard
+/*
+App::error()
+    ->inject('utopia')
+    ->inject('error')
+    ->inject('request')
+    ->inject('response')
+    ->action(function (App $utopia, throwable $error, Request $request, Response $response) {
+        $route = $utopia->match($request);
+        logError($error, "httpError", $route);
+
+        switch ($error->getCode()) {
+            case 400: // Error allowed publicly
+            case 401: // Error allowed publicly
+            case 402: // Error allowed publicly
+            case 403: // Error allowed publicly
+            case 404: // Error allowed publicly
+            case 406: // Error allowed publicly
+            case 409: // Error allowed publicly
+            case 412: // Error allowed publicly
+            case 425: // Error allowed publicly
+            case 429: // Error allowed publicly
+            case 501: // Error allowed publicly
+            case 503: // Error allowed publicly
+                $code = $error->getCode();
+                break;
+            default:
+                $code = 500; // All other errors get the generic 500 server error status code
+        }
+
+        $output = [
+            'message' => $error->getMessage(),
+            'code' => $error->getCode(),
+            'file' => $error->getFile(),
+            'line' => $error->getLine(),
+            'trace' => $error->getTrace(),
+            'version' => App::getEnv('OPEN_RUNTIMES_PROXY_VERSION', 'UNKNOWN')
+        ];
+
+        $response
+            ->addHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+            ->addHeader('Expires', '0')
+            ->addHeader('Pragma', 'no-cache')
+            ->setStatusCode($code);
+
+        $response->json($output);
+    });
+*/
 
 /** @phpstan-ignore-next-line */
 Co\run(
-    function () use ($run) {
+    function () {
+        global $register;
+
         // Keep updating executors state
         if (App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
-            Timer::tick((int) App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', 10000), function (int $timerId) {
-                fetchExecutorsState(false);
+            Timer::tick(\intval(App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', '10000')), function (int $timerId) {
+                \go(function () {
+                    fetchExecutorsState(false);
+                });
             });
         }
+
+        App::setMode(App::MODE_TYPE_PRODUCTION);
+
         $server = new Server('0.0.0.0', 80, false);
 
-        $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($run) {
-            try {
-                call_user_func($run, $swooleRequest, $swooleResponse);
-            } catch (\Throwable $th) {
-                $code = $th->getCode();
-                $code = $code === 0 ? 500 : $code;
-                logError($th, 'serverError');
+        App::setResource('executorStates', fn () => $register->get('executorStates'));
+        App::setResource('roundRobinAtomic', fn () => $register->get('roundRobinAtomic'));
 
+        $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) {
+            $request = new Request($swooleRequest);
+            $response = new Response($swooleResponse);
+
+            $app = new App('UTC');
+
+            try {
+                $app->run($request, $response);
+            } catch (\Throwable $th) {
+                $code = $th->getCode() === 0 ? 500 : $th->getCode(); // TODO: @Meldiron Set to 500 once proper utopia framework error handler is done
+                logError($th, "serverError");
+                $swooleResponse->setStatusCode($code);
                 $output = [
                     'message' => 'Error: ' . $th->getMessage(),
                     'code' => $code,
@@ -275,11 +358,7 @@ Co\run(
                     'line' => $th->getLine(),
                     'trace' => $th->getTrace()
                 ];
-
-                $swooleResponse->setStatusCode($code);
-                $swooleResponse->header('content-type', 'application/json; charset=UTF-8');
-                $swooleResponse->write(\json_encode($output));
-                $swooleResponse->end();
+                $swooleResponse->end(\json_encode($output));
             }
         });
 
