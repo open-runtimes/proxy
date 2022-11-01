@@ -264,8 +264,8 @@ App::error()
 
         $response
             ->setStatusCode($client->getStatusCode())
-            ->setContentType(Response::CONTENT_TYPE_JSON, self::CHARSET_UTF8)
-            ->send($client->getBody(), true);
+            ->setContentType(Response::CONTENT_TYPE_JSON, Response::CHARSET_UTF8)
+            ->send($client->getBody());
     });
 
 // TODO: @Meldiron Uncomment once utopia framework supports wildcard
