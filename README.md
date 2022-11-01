@@ -111,7 +111,7 @@ docker compose down
 
 | Variable name                           | Description                                                                                                                               |
 |-----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| OPEN_RUNTIMES_PROXY_ALGORITHM           | Proxying algorithm. Supports 'round-robin', 'random'.                                                                                     |
+| OPEN_RUNTIMES_PROXY_ALGORITHM           | Proxying algorithm. Supports `round-robin`, `random`.                                                                                     |
 | OPEN_RUNTIMES_PROXY_EXECUTORS           | Comma-separated hostnames of servers under the proxy.                                                                                     |
 | OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
 | OPEN_RUNTIMES_PROXY_PING_INTERVAL       | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK is 'enabled'.     |
@@ -119,8 +119,8 @@ docker compose down
 | OPEN_RUNTIMES_PROXY_ENV                 | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
 | OPEN_RUNTIMES_PROXY_SECRET              | Secret that needs to be provided in `Authroization` header when talking to proxy.                                                         |
 | OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET     | String provided as `Authorization` header by proxy when sending request to executor.                                                      |
-| OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER    | Logging provider as supported by `utopia-php/logger`                                                                                      |
-| OPEN_RUNTIMES_PROXY_LOGGING_CONFIG      | Logging configuration as requested by `utopia-php/logger`                                                                                 |
+| OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER    | Logging provider. Supports `sentry`, `appsignal`, `raygun`, `logown`. Leave empty for no cloud logging.                                   |
+| OPEN_RUNTIMES_PROXY_LOGGING_CONFIG      | Logging configuration as requested by `utopia-php/logger`.                                                                                |
 
 ## Contributing
 

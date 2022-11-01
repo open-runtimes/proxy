@@ -21,6 +21,10 @@ use Utopia\Balancing\Balancing;
 use Utopia\Balancing\Option;
 use Utopia\CLI\Console;
 use Utopia\Logger\Adapter;
+use Utopia\Logger\Adapter\AppSignal;
+use Utopia\Logger\Adapter\LogOwl;
+use Utopia\Logger\Adapter\Raygun;
+use Utopia\Logger\Adapter\Sentry;
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
@@ -74,12 +78,14 @@ $providerConfig = App::getEnv('OPEN_RUNTIMES_PROXY_LOGGING_CONFIG', '');
 $logger = null;
 
 if (!empty($providerName) && !empty($providerConfig) && Logger::hasProvider($providerName)) {
-    $classname = '\\Utopia\\Logger\\Adapter\\' . \ucfirst($providerName);
+    $adapter = match ($providerName) {
+        'sentry' => new Sentry($providerConfig),
+        'raygun' => new Raygun($providerConfig),
+        'logown' => new LogOwl($providerConfig),
+        'appsignal' => new AppSignal($providerConfig),
+        default => throw new Exception('Provider "' . $providerName . '" not supported.')
+    };
 
-    /**
-     * @var Adapter $adapter
-     */
-    $adapter = new $classname($providerConfig);
     $logger = new Logger($adapter);
 }
 
