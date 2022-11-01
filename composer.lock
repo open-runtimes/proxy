@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "8609eb1fb4fa540b345e290801afd740",
+    "content-hash": "6261750dabcf37ba58dbd655bb4194d4",
     "packages": [
         {
             "name": "utopia-php/balancing",
@@ -2129,7 +2129,6 @@
     "platform": {
         "php": ">=8.0.0",
         "ext-curl": "*",
-        "ext-mbstring": "*",
         "ext-json": "*",
         "ext-swoole": "*"
     },
