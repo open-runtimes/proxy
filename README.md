@@ -109,8 +109,9 @@ docker compose down
 
 ## Environment variables
 
-| OPEN_RUNTIMES_PROXY_ALGORITHM           | Proxying algorithm. Supports 'round-robin', 'random'.                                                                                     |
+| Variable name                           | Description                                                                                                                               |
 |-----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| OPEN_RUNTIMES_PROXY_ALGORITHM           | Proxying algorithm. Supports 'round-robin', 'random'.                                                                                     |
 | OPEN_RUNTIMES_PROXY_EXECUTORS           | Comma-separated hostnames of servers under the proxy.                                                                                     |
 | OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
 | OPEN_RUNTIMES_PROXY_PING_INTERVAL       | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK is 'enabled'.     |
