@@ -13,14 +13,14 @@ class HTTPTest extends TestCase
         $this->client = new Client();
 
         $this->client
-            ->setEndpoint("http://localhost/")
+            ->setEndpoint('http://localhost/')
             ->addHeader('Authorization', 'Bearer proxy-secret-key');
         ;
     }
 
     public function testBalancing(): void
     {
-        $response = $this->client->call(Client::METHOD_GET, "/v1/ping");
+        $response = $this->client->call(Client::METHOD_GET, '/v1/ping');
 
         // Ensure response as sent from Mockoon
         $this->assertEquals(200, $response['headers']['status-code']);
@@ -31,7 +31,7 @@ class HTTPTest extends TestCase
 
         $server1 = $response['body']['server'];
 
-        $response = $this->client->call(Client::METHOD_GET, "/v1/ping");
+        $response = $this->client->call(Client::METHOD_GET, '/v1/ping');
 
         $this->assertEquals(200, $response['headers']['status-code']);
         $this->assertEquals('pong', $response['body']['ping']);
@@ -43,7 +43,7 @@ class HTTPTest extends TestCase
         // Ensure round-robin split traffic
         $this->assertNotEquals($server1, $server2);
 
-        $response = $this->client->call(Client::METHOD_GET, "/v1/ping", [
+        $response = $this->client->call(Client::METHOD_GET, '/v1/ping', [
             'Authorization' => 'Bearer wrong-proxy-secret-key',
         ]);
 

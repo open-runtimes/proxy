@@ -64,7 +64,7 @@ class Client
         $ch                 = curl_init($this->endpoint . $path . (($method == self::METHOD_GET && !empty($params)) ? '?' . http_build_query($params) : ''));
 
         if (!$ch) {
-            throw new Exception("Could not prepare CURL request.");
+            throw new Exception('Could not prepare CURL request.');
         }
 
         $responseHeaders    = [];
@@ -132,7 +132,7 @@ class Client
             switch (substr($responseType, 0, $strpos)) {
                 case 'application/json':
                     if (\is_bool($responseBody)) {
-                        throw new Exception("Response is not a valid JSON.");
+                        throw new Exception('Response is not a valid JSON.');
                     }
 
                     $json = json_decode($responseBody, true);
@@ -156,7 +156,7 @@ class Client
         $responseHeaders['status-code'] = $responseStatus;
 
         if ($responseStatus === 500) {
-            echo 'Server error(' . $method . ': ' . $path . '. Params: ' . json_encode($params) . '): ' . json_encode($responseBody) . "\n";
+            echo 'Server error(' . $method . ': ' . $path . '. Params: ' . json_encode($params) . '): ' . json_encode($responseBody) . '\n';
         }
 
         return [

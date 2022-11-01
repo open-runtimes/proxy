@@ -2,6 +2,8 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+use OpenRuntimes\Proxy\Health\Health;
+use OpenRuntimes\Proxy\Health\Node;
 use Swoole\Atomic;
 use Swoole\Coroutine\Http\Client;
 use Utopia\Logger\Log;
@@ -31,90 +33,36 @@ $executorStates->create();
 
 $roundRobinAtomic = new Atomic(0); // Only used if round-robin algo is used
 
-function markOffline(string $executorHostname, string $error, bool $forceShowError = false): void
-{
-    global $executorStates;
-
-    $oldState = $executorStates->exists($executorHostname) ? $executorStates->get($executorHostname) : [];
-
-    $tableState = [
-        'status' => 'offline',
-        'hostname' => $executorHostname,
-        'state' => \json_encode([])
-    ];
-
-    $executorStates->set($executorHostname, $tableState);
-
-    if (!$oldState || ($oldState['status'] ?? '') === 'online' || $forceShowError) {
-        Console::warning('Executor "' . $executorHostname . '" went down! Message:');
-        Console::warning($error);
-    }
-}
-
-/**
- * @param array<string, mixed> $state
- */
-function markOnline(string $executorHostname, array $state, bool $forceShowError = false): void
-{
-    global $executorStates;
-
-    $oldState = $executorStates->exists($executorHostname) ? $executorStates->get($executorHostname) : [];
-
-    $tableState = [
-        'status' => 'online',
-        'hostname' => $executorHostname,
-        'state' => \json_encode($state)
-    ];
-
-    $executorStates->set($executorHostname, $tableState);
-
-    if (!$oldState || ($oldState['status'] ?? '') === 'offline' || $forceShowError) {
-        Console::success('Executor "' . $executorHostname . '" went online.');
-    }
-}
-
 function fetchExecutorsState(bool $forceShowError = false): void
 {
+    global $executorStates;
+
     $executors = \explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
 
+    $health = new Health();
+
     foreach ($executors as $executor) {
-        go(function () use ($executor, $forceShowError) {
-            try {
-                $endpoint = 'http://' . $executor . '/v1/health';
+        $health->addNode(new Node($executor));
+    }
 
-                $ch = \curl_init();
+    $nodes = $health
+        ->run()
+        ->getNodes();
 
-                \curl_setopt($ch, CURLOPT_URL, $endpoint);
-                \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                \curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-                \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-                \curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    'authorization: Bearer ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
-                ]);
+    foreach ($nodes as $node) {
+        $status = $node->isOnline() ? 'online' : 'offline';
+        $hostname = $node->getHostname();
 
-                $executorResponse = \curl_exec($ch);
-                $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                $error = \curl_error($ch);
+        $oldStatus = $executorStates->exists($hostname) ? $executorStates->get($hostname)['status'] ?? null : null;
+        if ($forceShowError === true || ($oldStatus !== null && $oldStatus !== $status)) {
+            Console::success('Executor "' . $node->getHostname() . '" went ' . $status . '.');
+        }
 
-                \curl_close($ch);
-
-                if ($statusCode == 200 && !\is_bool($executorResponse)) {
-                    $body = (array) \json_decode($executorResponse, true);
-
-                    if ($body['status'] === 'pass') {
-                        markOnline($executor, $body, $forceShowError);
-                    } else {
-                        $message = 'Response does not include "pass" status.';
-                        markOffline($executor, $message, $forceShowError);
-                    }
-                } else {
-                    $message = 'Code: ' . $statusCode . ' with response "' . $executorResponse .  '" and error error: ' . $error;
-                    markOffline($executor, $message, $forceShowError);
-                }
-            } catch (\Exception $err) {
-                throw $err;
-            }
-        });
+        $executorStates->set($node->getHostname(), [
+            'status' => $status,
+            'hostname' => $hostname,
+            'state' => \json_encode($node->getState())
+        ]);
     }
 }
 
@@ -177,7 +125,7 @@ function logError(Throwable $error, string $action, Utopia\Route $route = null):
     Console::error('[Error] Line: ' . $error->getLine());
 }
 
-Console::success("Waiting for executors to start...");
+Console::success('Waiting for executors to start...');
 
 $startupDelay = (int) App::getEnv('OPEN_RUNTIMES_PROXY_STARTUP_DELAY', 0);
 if ($startupDelay > 0) {
@@ -199,7 +147,7 @@ if (App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabl
     }
 }
 
-Console::log("State of executors at startup:");
+Console::log('State of executors at startup:');
 
 go(function () use ($executorStates) {
     $executors = \explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
@@ -254,7 +202,7 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
     $option = $balancing->run();
 
     if ($option === null) {
-        throw new Exception("No online executor found", 404);
+        throw new Exception('No online executor found', 404);
     }
 
     if ($algo instanceof RoundRobin) {
@@ -267,7 +215,7 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
         $executor[$key] = $option->getState($key);
     }
 
-    Console::success("Executing on " . $executor['hostname']);
+    Console::success('Executing on ' . $executor['hostname']);
 
     $client = new Client($executor['hostname'], 80);
     $client->setMethod($request->server['request_method'] ?? 'GET');
@@ -312,7 +260,7 @@ Co\run(
             } catch (\Throwable $th) {
                 $code = $th->getCode();
                 $code = $code === 0 ? 500 : $code;
-                logError($th, "serverError");
+                logError($th, 'serverError');
 
                 $output = [
                     'message' => 'Error: ' . $th->getMessage(),
@@ -329,7 +277,7 @@ Co\run(
             }
         });
 
-        Console::success("Functions proxy is ready.");
+        Console::success('Functions proxy is ready.');
 
         $server->start();
     }
