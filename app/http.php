@@ -42,7 +42,7 @@ function markOffline(string $executorHostname, string $error, bool $forceShowErr
         'hostname' => $executorHostname,
         'state' => \json_encode([])
     ];
-    
+
     $executorStates->set($executorHostname, $tableState);
 
     if (!$oldState || ($oldState['status'] ?? '') === 'online' || $forceShowError) {
@@ -126,12 +126,6 @@ $providerConfig = App::getEnv('OPEN_RUNTIMES_PROXY_LOGGING_CONFIG', '');
 $logger = null;
 
 if (!empty($providerName) && !empty($providerConfig) && Logger::hasProvider($providerName)) {
-    $algo = match ($algoType) {
-        'round-robin' => new RoundRobin($roundRobinIndex - 1), // Atomic indexes from 1. Balancing library indexes from 0. That's why -1
-        'random' => new Random(),
-        default => new Random()
-    };
-
     $classname = '\\Utopia\\Logger\\Adapter\\' . \ucfirst($providerName);
 
     /**
@@ -186,11 +180,11 @@ function logError(Throwable $error, string $action, Utopia\Route $route = null):
 Console::success("Waiting for executors to start...");
 
 $startupDelay = (int) App::getEnv('OPEN_RUNTIMES_PROXY_STARTUP_DELAY', 0);
-if($startupDelay > 0) {
-    \sleep($startupDelay / 1000);
+if ($startupDelay > 0) {
+    \sleep((int) ($startupDelay / 1000));
 }
 
-if(App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
+if (App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
     fetchExecutorsState(true);
 } else {
     // If no health check, mark all as online
@@ -305,7 +299,7 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
 Co\run(
     function () use ($run) {
         // Keep updating executors state
-        if(App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
+        if (App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
             Timer::tick((int) App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', 10000), function (int $timerId) {
                 fetchExecutorsState(false);
             });

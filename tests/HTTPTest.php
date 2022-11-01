@@ -11,7 +11,7 @@ class HTTPTest extends TestCase
     protected function setUp(): void
     {
         $this->client = new Client();
-        
+
         $this->client
             ->setEndpoint("http://localhost/")
             ->addHeader('Authorization', 'Bearer proxy-secret-key');
