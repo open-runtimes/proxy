@@ -150,7 +150,7 @@ if ($startupDelay > 0) {
 }
 
 \go(function () use ($register) {
-    if (App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
+    if (App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK', 'enabled') === 'enabled') {
         fetchExecutorsState(true);
     } else {
         $executorStates = $register->get('executorStates');
@@ -170,9 +170,7 @@ if ($startupDelay > 0) {
 
 Console::log('State of executors at startup:');
 
-go(function () {
-    global $register;
-
+go(function () use ($register) {
     $executorStates = $register->get('executorStates');
 
     $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
@@ -266,7 +264,8 @@ App::error()
 
         $response
             ->setStatusCode($client->getStatusCode())
-            ->json(\json_decode($client->getBody(), true));
+            ->setContentType(Response::CONTENT_TYPE_JSON, self::CHARSET_UTF8)
+            ->send($client->getBody(), true);
     });
 
 // TODO: @Meldiron Uncomment once utopia framework supports wildcard
@@ -320,11 +319,9 @@ App::error()
 
 /** @phpstan-ignore-next-line */
 Co\run(
-    function () {
-        global $register;
-
+    function () use ($register) {
         // Keep updating executors state
-        if (App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
+        if (App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK', 'enabled') === 'enabled') {
             Timer::tick(\intval(App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', '10000')), function (int $timerId) {
                 \go(function () {
                     fetchExecutorsState(false);

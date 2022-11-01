@@ -24,7 +24,6 @@
         "ext-curl": "*",
         "ext-json": "*",
         "ext-swoole": "*",
-        "utopia-php/framework": "0.24.*",
         "utopia-php/swoole": "0.6.*",
         "utopia-php/registry": "0.6.*",
         "utopia-php/cli": "0.13.*",
