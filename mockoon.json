@@ -42,7 +42,7 @@
             "responses": [
                 {
                     "uuid": "2f19044b-ffe3-45f7-974d-128211f061a7",
-                    "body": "{\"ping\":\"pong\",\"server\":\"{{header 'x-open-runtimes-executor-hostname' 'UNKNOWN'}}\",\"secret\":\"{{header 'x-open-runtimes-executor-secret' 'UNKNOWN'}}\"}",
+                    "body": "{\"ping\":\"pong\",\"server\":\"{{header 'x-open-runtimes-executor-hostname' 'UNKNOWN'}}\",\"secret\":\"{{header 'Authorization' 'UNKNOWN'}}\"}",
                     "latency": 0,
                     "statusCode": 200,
                     "label": "",

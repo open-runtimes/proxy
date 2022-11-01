@@ -48,7 +48,7 @@ class Client
 
     public function addHeader(string $key, string $value): self
     {
-        $this->headers[strtolower($key)] = strtolower($value);
+        $this->headers[strtolower($key)] = $value;
 
         return $this;
     }

@@ -11,32 +11,32 @@ class HTTPTest extends TestCase
     protected function setUp(): void
     {
         $this->client = new Client();
-        $this->client->setEndpoint("http://localhost/");
+        
+        $this->client
+            ->setEndpoint("http://localhost/")
+            ->addHeader('Authorization', 'Bearer proxy-secret-key');
+        ;
     }
 
     public function testBalancing(): void
     {
-        $response = $this->client->call(Client::METHOD_GET, "/v1/ping", [
-            'x-open-runtimes-proxy-secret' => 'proxy-secret-key'
-        ]);
+        $response = $this->client->call(Client::METHOD_GET, "/v1/ping");
 
         // Ensure response as sent from Mockoon
         $this->assertEquals(200, $response['headers']['status-code']);
         $this->assertEquals('pong', $response['body']['ping']);
         $this->assertContains($response['body']['server'], ['mockoon1', 'mockoon2']);
         // Ensure proper executor secret
-        $this->assertEquals('executor-secret-key', $response['body']['secret']);
+        $this->assertEquals('Bearer executor-secret-key', $response['body']['secret']);
 
         $server1 = $response['body']['server'];
 
-        $response = $this->client->call(Client::METHOD_GET, "/v1/ping", [
-            'x-open-runtimes-proxy-secret' => 'proxy-secret-key'
-        ]);
+        $response = $this->client->call(Client::METHOD_GET, "/v1/ping");
 
         $this->assertEquals(200, $response['headers']['status-code']);
         $this->assertEquals('pong', $response['body']['ping']);
         $this->assertContains($response['body']['server'], ['mockoon1', 'mockoon2']);
-        $this->assertEquals('executor-secret-key', $response['body']['secret']);
+        $this->assertEquals('Bearer executor-secret-key', $response['body']['secret']);
 
         $server2 = $response['body']['server'];
 
@@ -44,7 +44,7 @@ class HTTPTest extends TestCase
         $this->assertNotEquals($server1, $server2);
 
         $response = $this->client->call(Client::METHOD_GET, "/v1/ping", [
-            'x-open-runtimes-proxy-secret' => 'wrong-secret-key'
+            'Authorization' => 'Bearer wrong-proxy-secret-key',
         ]);
 
         // Ensure secret is nessessary

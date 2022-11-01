@@ -22,7 +22,6 @@
     "require": {
         "php": ">=8.0.0",
         "ext-curl": "*",
-        "ext-imagick": "*",
         "ext-mbstring": "*",
         "ext-json": "*",
         "ext-swoole": "*",

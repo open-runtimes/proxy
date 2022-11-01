@@ -22,7 +22,9 @@ use Utopia\Logger\Adapter;
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
-$executorStates = new Table(1024);
+$executorsCount = \count(\explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', '')));
+$executorStates = new Table($executorsCount);
+$executorStates->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
 $executorStates->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
 $executorStates->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
 $executorStates->create();
@@ -35,10 +37,13 @@ function markOffline(string $executorHostname, string $error, bool $forceShowErr
 
     $oldState = $executorStates->exists($executorHostname) ? $executorStates->get($executorHostname) : [];
 
-    $state['status'] = 'offline';
-    $state['hostname'] = $executorHostname;
-    $state['state'] = \json_encode([]);
-    $executorStates->set($executorHostname, $state);
+    $tableState = [
+        'status' => 'offline',
+        'hostname' => $executorHostname,
+        'state' => \json_encode([])
+    ];
+    
+    $executorStates->set($executorHostname, $tableState);
 
     if (!$oldState || ($oldState['status'] ?? '') === 'online' || $forceShowError) {
         Console::warning('Executor "' . $executorHostname . '" went down! Message:');
@@ -55,10 +60,13 @@ function markOnline(string $executorHostname, array $state, bool $forceShowError
 
     $oldState = $executorStates->exists($executorHostname) ? $executorStates->get($executorHostname) : [];
 
-    $state['status'] = 'online';
-    $state['hostname'] = $executorHostname;
-    $state['state'] = \json_encode($state);
-    $executorStates->set($executorHostname, $state);
+    $tableState = [
+        'status' => 'online',
+        'hostname' => $executorHostname,
+        'state' => \json_encode($state)
+    ];
+
+    $executorStates->set($executorHostname, $tableState);
 
     if (!$oldState || ($oldState['status'] ?? '') === 'offline' || $forceShowError) {
         Console::success('Executor "' . $executorHostname . '" went online.');
@@ -81,7 +89,7 @@ function fetchExecutorsState(bool $forceShowError = false): void
                 \curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                 \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
                 \curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    'x-open-runtimes-executor-secret: ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
+                    'authorization: Bearer ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
                 ]);
 
                 $executorResponse = \curl_exec($ch);
@@ -118,6 +126,12 @@ $providerConfig = App::getEnv('OPEN_RUNTIMES_PROXY_LOGGING_CONFIG', '');
 $logger = null;
 
 if (!empty($providerName) && !empty($providerConfig) && Logger::hasProvider($providerName)) {
+    $algo = match ($algoType) {
+        'round-robin' => new RoundRobin($roundRobinIndex - 1), // Atomic indexes from 1. Balancing library indexes from 0. That's why -1
+        'random' => new Random(),
+        default => new Random()
+    };
+
     $classname = '\\Utopia\\Logger\\Adapter\\' . \ucfirst($providerName);
 
     /**
@@ -171,9 +185,25 @@ function logError(Throwable $error, string $action, Utopia\Route $route = null):
 
 Console::success("Waiting for executors to start...");
 
-\sleep(5);
+$startupDelay = (int) App::getEnv('OPEN_RUNTIMES_PROXY_STARTUP_DELAY', 0);
+if($startupDelay > 0) {
+    \sleep($startupDelay / 1000);
+}
 
-fetchExecutorsState(true);
+if(App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
+    fetchExecutorsState(true);
+} else {
+    // If no health check, mark all as online
+    $executors = \explode(',', App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
+
+    foreach ($executors as $executor) {
+        $executorStates->set($executor, [
+            'status' => 'online',
+            'hostname' => $executor,
+            'state' =>  \json_encode([])
+        ]);
+    }
+}
 
 Console::log("State of executors at startup:");
 
@@ -197,7 +227,7 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
     global $executorStates;
     global $roundRobinAtomic;
 
-    $secretKey = $request->header['x-open-runtimes-proxy-secret'] ?? '';
+    $secretKey = \explode(' ', $request->header['authorization'] ?? '')[1] ?? '';
 
     if (empty($secretKey)) {
         throw new Exception('Incorrect proxy key.', 401);
@@ -243,22 +273,20 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
         $executor[$key] = $option->getState($key);
     }
 
-    $state = \json_decode($executor['state'], true);
+    Console::success("Executing on " . $executor['hostname']);
 
-    Console::success("Executing on " . $state['hostname']);
-
-    $client = new Client($state['hostname'], 80);
+    $client = new Client($executor['hostname'], 80);
     $client->setMethod($request->server['request_method'] ?? 'GET');
 
     $headers = \array_merge($request->header, [
-        'x-open-runtimes-executor-secret' => App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
+        'authorization' => 'Bearer ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
     ]);
 
     // Header used for testing
     $isProduction = App::getEnv('OPEN_RUNTIMES_PROXY_ENV', 'development') === 'production';
     if (!$isProduction) {
         $headers = \array_merge($headers, [
-            'x-open-runtimes-executor-hostname' => $state['hostname']
+            'x-open-runtimes-executor-hostname' => $executor['hostname']
         ]);
     }
 
@@ -277,10 +305,11 @@ $run = function (SwooleRequest $request, SwooleResponse $response) {
 Co\run(
     function () use ($run) {
         // Keep updating executors state
-        Timer::tick((int) App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', 10000), function (int $timerId) {
-            fetchExecutorsState(false);
-        });
-
+        if(App::getEnv('OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK', 'enabled') === 'enabled') {
+            Timer::tick((int) App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', 10000), function (int $timerId) {
+                fetchExecutorsState(false);
+            });
+        }
         $server = new Server('0.0.0.0', 80, false);
 
         $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($run) {

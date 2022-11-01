@@ -20,6 +20,107 @@ The proxy is responsible for checking health of executors, and proxying requests
 * **Performance** - Coroutine-style HTTP servers allows asynchronous operations without blocking. We. Run. Fast! ⚡
 * **Open Source** - Released under the MIT license, free to use and extend.
 
+## Getting Started - Open Runtimes Executor
+
+> 🚧 Getting started with Open Runtimes Executor coming soon.
+
+## Getting Started - Generic Proxy
+
+1. Pull Open Runtimes Proxy image:
+
+```bash
+docker pull openruntimes/proxy
+```
+
+2. Pull whoami image:
+
+```bash
+docker pull containous/whoami
+```
+
+3. Create `docker-compose.yml` file:
+
+```yml
+version: '3'
+services:
+  openruntimes-proxy:
+    image: openruntimes/proxy
+    ports:
+      - 9800:80
+    environment:
+      - OPEN_RUNTIMES_PROXY_ALGORITHM
+      - OPEN_RUNTIMES_PROXY_EXECUTORS
+      - OPEN_RUNTIMES_PROXY_PING_INTERVAL
+      - OPEN_RUNTIMES_PROXY_ENV
+      - OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET
+      - OPEN_RUNTIMES_PROXY_SECRET
+      - OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER
+      - OPEN_RUNTIMES_PROXY_LOGGING_CONFIG
+      - OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK
+      - OPEN_RUNTIMES_PROXY_STARTUP_DELAY
+  whoami1:
+    hostname: whoami1
+    image: containous/whoami
+  whoami2:
+    hostname: whoami2
+    image: containous/whoami
+```
+
+> We are adding 1 proxy and 2 HTTP servers. Notice only proxy is exported, on a port `9800`.
+
+4. Create `.env` file:
+
+```
+OPEN_RUNTIMES_PROXY_ALGORITHM=round-robin
+OPEN_RUNTIMES_PROXY_EXECUTORS=whoami1,whoami2
+OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK=disabled
+OPEN_RUNTIMES_PROXY_SECRET=proxy-secret-key
+OPEN_RUNTIMES_PROXY_STARTUP_DELAY=5000
+OPEN_RUNTIMES_PROXY_PING_INTERVAL=5000
+OPEN_RUNTIMES_PROXY_ENV=development
+OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET=executor-secret-key
+OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER=
+OPEN_RUNTIMES_PROXY_LOGGING_CONFIG=
+```
+
+> Notice we disabled health check. We recommend keeping it `enabled` and implementing proper health check endpoint
+
+5. Start Docker containers:
+
+```bash
+docker compose up -d
+```
+
+6. Send a HTTP request to proxy server:
+
+```bash
+curl -H "Authorization: Bearer proxy-secret-key" -X GET http://localhost:9800/
+```
+
+Run the command multiple times to see request being proxied between both whoami servers. You can see `Hostname` changing the value.
+
+> Noitce we provided authorization header as configured in `.env` in `OPEN_RUNTIMES_PROXY_SECRET`.
+
+7. Stop Docker containers:
+
+```bash
+docker compose down
+```
+
+## Environment variables
+
+| OPEN_RUNTIMES_PROXY_ALGORITHM           | Proxying algorithm. Supports 'round-robin', 'random'.                                                                                     |
+|-----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| OPEN_RUNTIMES_PROXY_EXECUTORS           | Comma-separated hostnames of servers under the proxy.                                                                                     |
+| OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
+| OPEN_RUNTIMES_PROXY_PING_INTERVAL       | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPEN_RUNTIMES_PROXY_OPTIONS_HEALTHCHECK is 'enabled'.     |
+| OPEN_RUNTIMES_PROXY_STARTUP_DELAY       | Delay in milliseconds before starting proxy. Useful if you want your executors to be ready before proxy starts.                           |
+| OPEN_RUNTIMES_PROXY_ENV                 | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
+| OPEN_RUNTIMES_PROXY_SECRET              | Secret that needs to be provided in `Authroization` header when talking to proxy.                                                         |
+| OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET     | String provided as `Authorization` header by proxy when sending request to executor.                                                      |
+| OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER    | Logging provider as supported by `utopia-php/logger`                                                                                      |
+| OPEN_RUNTIMES_PROXY_LOGGING_CONFIG      | Logging configuration as requested by `utopia-php/logger`                                                                                 |
+
 ## Contributing
 
 All code contributions - including those of people having commit access - must go through a pull request and be approved by a core developer before being merged. This is to ensure a proper review of all the code.
