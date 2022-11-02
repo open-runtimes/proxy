@@ -30,7 +30,7 @@ use Utopia\Swoole\Response;
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
-App::setMode(App::getEnv('OPEN_RUNTIMES_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
+App::setMode((string) App::getEnv('OPEN_RUNTIMES_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
 
 // Setup Registry
 
@@ -256,7 +256,7 @@ App::wildcard()
         $client->setData($request->getRawPayload());
         $client->execute($request->getURI());
 
-        foreach($client->headers as $header => $value) {
+        foreach ($client->headers as $header => $value) {
             $response->addHeader($header, $value);
         }
 
