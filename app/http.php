@@ -94,7 +94,7 @@ App::setResource('balancing', function (Table $state, Algorithm $algo) {
     return $balancing;
 }, ['state', 'algo']);
 
-function fetchExecutorsState(Registry $register, bool $forceShowError = false): void
+function healthCheck(Registry $register, bool $forceShowError = false): void
 {
     $state = $register->get('state');
 
@@ -292,8 +292,10 @@ Co\run(
                     }
 
                     // Initial health cehck + start timer
-                    fetchExecutorsState($register, true);
-                    Timer::tick(\intval(App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL', '10000')), fn () => \go(fn () => fetchExecutorsState($register, false)));
+                    healthCheck($register, true);
+
+                    $defaultInterval = '10000'; // 10 seconds
+                    Timer::tick(\intval(App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => \go(fn () => healthCheck($register, false)));
                 }
         ]);
 

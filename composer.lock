@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "675339369ed9d666f5cb422f5b5038a9",
+    "content-hash": "8c12a8a1ecb78f6ec99ac2955809f1c5",
     "packages": [
         {
             "name": "utopia-php/balancing",
@@ -269,16 +269,16 @@
         },
         {
             "name": "utopia-php/swoole",
-            "version": "dev-feat-upgrade-framework",
+            "version": "0.7.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/swoole.git",
-                "reference": "c1fe3bec56b7a0f45c1e6df17bec074e479f9ae6"
+                "reference": "3d6a31a1035659669d828756a0f0ec83cad754c8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/swoole/zipball/c1fe3bec56b7a0f45c1e6df17bec074e479f9ae6",
-                "reference": "c1fe3bec56b7a0f45c1e6df17bec074e479f9ae6",
+                "url": "https://api.github.com/repos/utopia-php/swoole/zipball/3d6a31a1035659669d828756a0f0ec83cad754c8",
+                "reference": "3d6a31a1035659669d828756a0f0ec83cad754c8",
                 "shasum": ""
             },
             "require": {
@@ -314,9 +314,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/swoole/issues",
-                "source": "https://github.com/utopia-php/swoole/tree/feat-upgrade-framework"
+                "source": "https://github.com/utopia-php/swoole/tree/0.7.0"
             },
-            "time": "2022-11-02T10:03:37+00:00"
+            "time": "2022-11-02T10:32:54+00:00"
         }
     ],
     "packages-dev": [
@@ -2218,18 +2218,9 @@
             "time": "2021-07-28T10:34:58+00:00"
         }
     ],
-    "aliases": [
-        {
-            "package": "utopia-php/swoole",
-            "version": "dev-feat-upgrade-framework",
-            "alias": "0.6.0",
-            "alias_normalized": "0.6.0.0"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "utopia-php/swoole": 20
-    },
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

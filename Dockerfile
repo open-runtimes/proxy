@@ -65,7 +65,7 @@ COPY ./src /usr/local/src
 
 # Extensions and libraries
 COPY --from=composer /usr/local/src/vendor /usr/local/vendor
-COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20200930/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/yasd.so* /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
+COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20200930/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 
 RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 

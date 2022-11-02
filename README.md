@@ -1,4 +1,4 @@
-# Open Runtimes Proxy 👷
+# Open Runtimes Proxy 🚦
 
 ![open-runtimes-box-bg-cover](https://user-images.githubusercontent.com/1297371/151676246-0e18f694-dfd7-4bab-b64b-f590fec76ef1.png)
 
