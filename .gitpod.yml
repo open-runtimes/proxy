@@ -1,4 +1,3 @@
-
 tasks:
   - name: PHP preparations
     init: |
