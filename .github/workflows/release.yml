@@ -31,4 +31,4 @@ jobs:
             OPEN_RUNTIMES_PROXY_VERSION=${{ env.TAG }}
           context: .
           push: true
-          tags: ${{ env.IMAGE_NAME }}:${{ env.TAG }}
+          tags: ${{ env.IMAGE_NAME }}:latest,${{ env.IMAGE_NAME }}:${{ env.TAG }}
