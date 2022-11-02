@@ -17,13 +17,18 @@ jobs:
 
     - run: git checkout HEAD^2
 
-    - name: Build Docker Image
+    - name: Build and Push Docker Image
+      with:
+        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+        OPEN_RUNTIMES_PROXY_VERSION: ${{ github.ref }}
       run:  |
         export COMPOSE_INTERACTIVE_NO_CLI
         export DOCKER_BUILDKIT=1
         export COMPOSE_DOCKER_CLI_BUILD=1
         export BUILDKIT_PROGRESS=plain
-        docker build -t openruntimes/proxy:latest .
-
-    - name: Push Docker Image
-      run: docker push openruntimes/proxy:latest
+        echo "${DOCKERHUB_PASSWORD}" | docker login --username "${DOCKERHUB_USERNAME}" --password-stdin
+        docker build -t meldiron/ci-test-proxy:$OPEN_RUNTIMES_PROXY_VERSION .
+        docker build -t meldiron/ci-test-proxy:latest .
+        docker push "meldiron/ci-test-proxy:$OPEN_RUNTIMES_PROXY_VERSION
+        docker push meldiron/ci-test-proxy:latest

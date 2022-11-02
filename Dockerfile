@@ -40,6 +40,8 @@ RUN \
 # Proxy
 FROM php:8.0.18-cli-alpine3.15 as final
 
+ENV OPEN_RUNTIMES_PROXY_VERSION=$OPEN_RUNTIMES_PROXY_VERSION
+
 LABEL maintainer="team@appwrite.io"
 
 RUN \
