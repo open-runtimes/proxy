@@ -87,7 +87,7 @@ We use PHP framework PHPUnit to test Open Runtimes. Every PR is automatically te
 Before running the tests, make sure to install all required PHP libraries:
 
 ```bash
-docker run --rm -v $PWD:/app --network proxy_servers -w /app phpswoole/swoole:4.8.12-php8.0-alpine sh -c \ "composer test"
+composer install --profile --ignore-platform-reqs
 ```
 
 > We run tests in separate Swoole container to ensure unit tests have all nessessary extensions ready.
@@ -99,7 +99,7 @@ To run tests, you need to start Docker Compose stack, and then run PHPUnit:
 ```bash
 docker compose up -d
 # Wait for ~5 seconds for proxy to start
-docker compose exec -T openruntimes-proxy composer test
+docker run --rm -v $PWD:/app --network proxy_servers -w /app phpswoole/swoole:4.8.12-php8.0-alpine sh -c \ "composer test"
 ```
 
 To run linter, you need to run Pint:
