@@ -28,7 +28,6 @@ services:
       - OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER
       - OPEN_RUNTIMES_PROXY_LOGGING_CONFIG
       - OPEN_RUNTIMES_PROXY_HEALTHCHECK
-      - OPEN_RUNTIMES_PROXY_STARTUP_DELAY
   mockoon1:
     container_name: mockoon1
     image: mockoon/cli:2.2.1

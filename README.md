@@ -57,7 +57,6 @@ services:
       - OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER
       - OPEN_RUNTIMES_PROXY_LOGGING_CONFIG
       - OPEN_RUNTIMES_PROXY_HEALTHCHECK
-      - OPEN_RUNTIMES_PROXY_STARTUP_DELAY
   whoami1:
     hostname: whoami1
     image: containous/whoami
@@ -75,7 +74,6 @@ OPEN_RUNTIMES_PROXY_ALGORITHM=round-robin
 OPEN_RUNTIMES_PROXY_EXECUTORS=whoami1,whoami2
 OPEN_RUNTIMES_PROXY_HEALTHCHECK=disabled
 OPEN_RUNTIMES_PROXY_SECRET=proxy-secret-key
-OPEN_RUNTIMES_PROXY_STARTUP_DELAY=5000
 OPEN_RUNTIMES_PROXY_PING_INTERVAL=5000
 OPEN_RUNTIMES_PROXY_ENV=development
 OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET=executor-secret-key
@@ -115,7 +113,6 @@ docker compose down
 | OPEN_RUNTIMES_PROXY_EXECUTORS           | Comma-separated hostnames of servers under the proxy.                                                                                     |
 | OPEN_RUNTIMES_PROXY_HEALTHCHECK | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
 | OPEN_RUNTIMES_PROXY_PING_INTERVAL       | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPEN_RUNTIMES_PROXY_HEALTHCHECK is 'enabled'.     |
-| OPEN_RUNTIMES_PROXY_STARTUP_DELAY       | Delay in milliseconds before starting proxy. Useful if you want your executors to be ready before proxy starts.                           |
 | OPEN_RUNTIMES_PROXY_ENV                 | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
 | OPEN_RUNTIMES_PROXY_SECRET              | Secret that needs to be provided in `Authroization` header when talking to proxy.                                                         |
 | OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET     | String provided as `Authorization` header by proxy when sending request to executor.                                                      |
