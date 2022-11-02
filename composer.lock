@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7c593f56be353c41810dd5da77e6b419",
+    "content-hash": "675339369ed9d666f5cb422f5b5038a9",
     "packages": [
         {
             "name": "utopia-php/balancing",
-            "version": "dev-feat-get-algo",
+            "version": "0.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/balancing.git",
-                "reference": "decfdd7077478ffe0e5390a3cb22263f245f8702"
+                "reference": "ab6faf326ef6f7dacb7f003f1f157898290d0d45"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/balancing/zipball/decfdd7077478ffe0e5390a3cb22263f245f8702",
-                "reference": "decfdd7077478ffe0e5390a3cb22263f245f8702",
+                "url": "https://api.github.com/repos/utopia-php/balancing/zipball/ab6faf326ef6f7dacb7f003f1f157898290d0d45",
+                "reference": "ab6faf326ef6f7dacb7f003f1f157898290d0d45",
                 "shasum": ""
             },
             "require": {
@@ -49,9 +49,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/balancing/issues",
-                "source": "https://github.com/utopia-php/balancing/tree/feat-get-algo"
+                "source": "https://github.com/utopia-php/balancing/tree/0.2.0"
             },
-            "time": "2022-11-02T07:29:43+00:00"
+            "time": "2022-11-02T09:47:00+00:00"
         },
         {
             "name": "utopia-php/cli",
@@ -108,16 +108,16 @@
         },
         {
             "name": "utopia-php/framework",
-            "version": "dev-feat-wildcard-route",
+            "version": "0.25.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/framework.git",
-                "reference": "d7aed08fb9d830566a6111a706c000ab05aaace7"
+                "reference": "c524f681254255c8204fbf7919c53bf3b4982636"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/framework/zipball/d7aed08fb9d830566a6111a706c000ab05aaace7",
-                "reference": "d7aed08fb9d830566a6111a706c000ab05aaace7",
+                "url": "https://api.github.com/repos/utopia-php/framework/zipball/c524f681254255c8204fbf7919c53bf3b4982636",
+                "reference": "c524f681254255c8204fbf7919c53bf3b4982636",
                 "shasum": ""
             },
             "require": {
@@ -145,9 +145,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/framework/issues",
-                "source": "https://github.com/utopia-php/framework/tree/feat-wildcard-route"
+                "source": "https://github.com/utopia-php/framework/tree/0.25.0"
             },
-            "time": "2022-11-02T04:51:36+00:00"
+            "time": "2022-11-02T09:49:57+00:00"
         },
         {
             "name": "utopia-php/logger",
@@ -273,18 +273,18 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/swoole.git",
-                "reference": "0415adad1624a24f577373247d5142d82e14b081"
+                "reference": "c1fe3bec56b7a0f45c1e6df17bec074e479f9ae6"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/swoole/zipball/0415adad1624a24f577373247d5142d82e14b081",
-                "reference": "0415adad1624a24f577373247d5142d82e14b081",
+                "url": "https://api.github.com/repos/utopia-php/swoole/zipball/c1fe3bec56b7a0f45c1e6df17bec074e479f9ae6",
+                "reference": "c1fe3bec56b7a0f45c1e6df17bec074e479f9ae6",
                 "shasum": ""
             },
             "require": {
                 "ext-swoole": "*",
                 "php": ">=8.0",
-                "utopia-php/framework": "dev-feat-wildcard-route as 0.24.0"
+                "utopia-php/framework": "0.25.*"
             },
             "require-dev": {
                 "laravel/pint": "1.2.*",
@@ -316,7 +316,7 @@
                 "issues": "https://github.com/utopia-php/swoole/issues",
                 "source": "https://github.com/utopia-php/swoole/tree/feat-upgrade-framework"
             },
-            "time": "2022-11-02T06:55:25+00:00"
+            "time": "2022-11-02T10:03:37+00:00"
         }
     ],
     "packages-dev": [
@@ -2220,18 +2220,6 @@
     ],
     "aliases": [
         {
-            "package": "utopia-php/balancing",
-            "version": "dev-feat-get-algo",
-            "alias": "0.1.0",
-            "alias_normalized": "0.1.0.0"
-        },
-        {
-            "package": "utopia-php/framework",
-            "version": "dev-feat-wildcard-route",
-            "alias": "0.24.0",
-            "alias_normalized": "0.24.0.0"
-        },
-        {
             "package": "utopia-php/swoole",
             "version": "dev-feat-upgrade-framework",
             "alias": "0.6.0",
@@ -2240,9 +2228,7 @@
     ],
     "minimum-stability": "stable",
     "stability-flags": {
-        "utopia-php/swoole": 20,
-        "utopia-php/framework": 20,
-        "utopia-php/balancing": 20
+        "utopia-php/swoole": 20
     },
     "prefer-stable": false,
     "prefer-lowest": false,

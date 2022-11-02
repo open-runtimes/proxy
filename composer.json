@@ -25,11 +25,11 @@
         "ext-json": "*",
         "ext-swoole": "*",
         "utopia-php/swoole": "dev-feat-upgrade-framework as 0.6.0",
-        "utopia-php/framework": "dev-feat-wildcard-route as 0.24.0",
+        "utopia-php/framework": "0.25.*",
         "utopia-php/registry": "0.6.*",
         "utopia-php/cli": "0.13.*",
         "utopia-php/logger": "0.3.*",
-        "utopia-php/balancing": "dev-feat-get-algo as 0.1.0"
+        "utopia-php/balancing": "0.2.*"
     },
     "require-dev": {
         "swoole/ide-helper": "4.8.5",

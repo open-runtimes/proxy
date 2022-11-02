@@ -181,9 +181,11 @@ App::wildcard()
     ->inject('request')
     ->inject('response')
     ->action(function (Balancing $balancing, Request $request, Response $response) {
+        // TODO: @Meldiron Use RuntimeID (from body or header) to prefer executors with warm runtime
+        /*
         $body = \json_decode($request->getRawPayload() ? $request->getRawPayload() : '{}', true);
         $runtimeId = $body['runtimeId'] ?? null;
-        // TODO: @Meldiron Use RuntimeID in CPU-based adapter
+        */
 
         $option = $balancing->run();
 
@@ -191,13 +193,9 @@ App::wildcard()
             throw new Exception('No online executor found', 404);
         }
 
-        $executor = [];
+        $hostname = $option->getState('hostname') ?? '';
 
-        foreach ($option->getStateKeys() as $key) {
-            $executor[$key] = $option->getState($key);
-        }
-
-        $client = new Client($executor['hostname'], 80);
+        $client = new Client($hostname, 80);
         $client->setMethod($request->getMethod());
 
         $headers = \array_merge($request->getHeaders(), [
@@ -207,7 +205,7 @@ App::wildcard()
         // Header used for testing
         if (App::isDevelopment()) {
             $headers = \array_merge($headers, [
-                'x-open-runtimes-executor-hostname' => $executor['hostname']
+                'x-open-runtimes-executor-hostname' => $hostname
             ]);
         }
 
