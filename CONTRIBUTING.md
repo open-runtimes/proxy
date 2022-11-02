@@ -87,8 +87,10 @@ We use PHP framework PHPUnit to test Open Runtimes. Every PR is automatically te
 Before running the tests, make sure to install all required PHP libraries:
 
 ```bash
-docker run --rm --interactive --tty --volume $PWD:/app composer install
+docker run --rm -v $PWD:/app --network proxy_servers -w /app phpswoole/swoole:4.8.12-php8.0-alpine sh -c \ "composer test"
 ```
+
+> We run tests in separate Swoole container to ensure unit tests have all nessessary extensions ready.
 
 Once ready, you can test proxy.
 

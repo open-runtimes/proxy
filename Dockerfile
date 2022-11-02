@@ -1,3 +1,4 @@
+# Install PHP libraries
 FROM composer:2.0 as composer
 
 WORKDIR /usr/local/src/
@@ -7,46 +8,66 @@ COPY composer.json /usr/local/src/
 
 RUN composer install --ignore-platform-reqs --optimize-autoloader \
     --no-plugins --no-scripts --prefer-dist
-    
-FROM php:8.1.8-cli-alpine3.15
 
-ENV OPEN_RUNTIMES_PROXY_VERSION=0.1.0
+# Prepare generic compiler
+FROM php:8.0.18-cli-alpine3.15 as compile
 
-# Source: https://github.com/swoole/docker-swoole/blob/master/dockerfiles/5.0.0/php8.1/alpine/Dockerfile
+ENV PHP_SWOOLE_VERSION=v4.8.10
+
 RUN \
-    curl -sfL https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer && \
-    chmod +x /usr/bin/composer                                                                     && \
-    composer self-update --clean-backups 2.3.10                                    && \
-    apk update && \
-    apk add --no-cache libstdc++ libpq && \
-    apk add --no-cache --virtual .build-deps $PHPIZE_DEPS curl-dev postgresql-dev openssl-dev pcre-dev pcre2-dev zlib-dev && \
-    docker-php-ext-install sockets && \
-    docker-php-source extract && \
-    mkdir /usr/src/php/ext/swoole && \
-    curl -sfL https://github.com/swoole/swoole-src/archive/v5.0.0.tar.gz -o swoole.tar.gz && \
-    tar xfz swoole.tar.gz --strip-components=1 -C /usr/src/php/ext/swoole && \
-    docker-php-ext-configure swoole \
-        --enable-mysqlnd      \
-        --enable-swoole-pgsql \
-        --enable-openssl      \
-        --enable-sockets --enable-swoole-curl && \
-    docker-php-ext-install -j$(nproc) swoole && \
-    rm -f swoole.tar.gz $HOME/.composer/*-old.phar && \
-    docker-php-source delete && \
-    apk del .build-deps
+  apk add --no-cache --virtual .deps \
+  make \
+  automake \
+  autoconf \
+  gcc \
+  g++ \
+  git \
+  openssl-dev
+  
+RUN docker-php-ext-install sockets
+
+# Compile Swoole
+FROM compile AS swoole
+
+RUN \
+  git clone --depth 1 --branch $PHP_SWOOLE_VERSION https://github.com/swoole/swoole-src.git && \
+  cd swoole-src && \
+  phpize && \
+  ./configure --enable-sockets --enable-http2 --enable-openssl && \
+  make && make install && \
+  cd ..
+
+# Proxy
+FROM php:8.0.18-cli-alpine3.15 as final
+
+LABEL maintainer="team@appwrite.io"
+
+RUN \
+  apk update \
+  && apk add --no-cache --virtual .deps \
+  make \
+  automake \
+  autoconf \
+  gcc \
+  g++ \
+  curl-dev \
+  && apk add --no-cache \
+  libstdc++ \
+  && docker-php-ext-install sockets \
+  && apk del .deps \
+  && rm -rf /var/cache/apk/*
 
 WORKDIR /usr/local/
 
-# Add Source Code
+# Source code
 COPY ./app /usr/local/app
 COPY ./src /usr/local/src
-COPY ./tests /usr/local/tests
 
+# Extensions and libraries
 COPY --from=composer /usr/local/src/vendor /usr/local/vendor
+COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20200930/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/yasd.so* /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
 
-# For running tests in Docker container
-COPY composer.json /usr/local/composer.json
-COPY phpunit.xml /usr/local/phpunit.xml
+RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 
 EXPOSE 80
 

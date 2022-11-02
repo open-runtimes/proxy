@@ -29,4 +29,6 @@ jobs:
       run: docker ps
 
     - name: Run Tests
-      run: "docker compose exec -T openruntimes-proxy composer test"
+      run: |
+        docker run --rm -v $PWD:/app --network proxy_servers -w /app phpswoole/swoole:4.8.12-php8.0-alpine sh -c \
+        "composer install --profile --ignore-platform-reqs && composer test"

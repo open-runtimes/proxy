@@ -13,7 +13,7 @@ class HTTPTest extends TestCase
         $this->client = new Client();
 
         $this->client
-            ->setEndpoint('http://localhost/')
+            ->setEndpoint('http://openruntimes-proxy/')
             ->addHeader('Authorization', 'Bearer proxy-secret-key');
         ;
     }
