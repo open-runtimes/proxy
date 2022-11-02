@@ -20,34 +20,40 @@ class HTTPTest extends TestCase
 
     public function testBalancing(): void
     {
-        $response = $this->client->call(Client::METHOD_GET, '/v1/ping');
+        $response = (array) $this->client->call(Client::METHOD_GET, '/v1/ping');
+        $headers = (array) $response['headers'];
+        $body = (array) $response['body'];
 
         // Ensure response as sent from Mockoon
-        $this->assertEquals(200, $response['headers']['status-code']);
-        $this->assertEquals('pong', $response['body']['ping']);
-        $this->assertContains($response['body']['server'], ['mockoon1', 'mockoon2']);
+        $this->assertEquals(200, $headers['status-code']);
+        $this->assertEquals('pong', $body['ping']);
+        $this->assertContains($body['server'], ['mockoon1', 'mockoon2']);
         // Ensure proper executor secret
-        $this->assertEquals('Bearer executor-secret-key', $response['body']['secret']);
+        $this->assertEquals('Bearer executor-secret-key', $body['secret']);
 
-        $server1 = $response['body']['server'];
+        $server1 = $body['server'];
 
-        $response = $this->client->call(Client::METHOD_GET, '/v1/ping');
+        $response = (array) $this->client->call(Client::METHOD_GET, '/v1/ping');
+        $headers = (array) $response['headers'];
+        $body = (array) $response['body'];
 
-        $this->assertEquals(200, $response['headers']['status-code']);
-        $this->assertEquals('pong', $response['body']['ping']);
-        $this->assertContains($response['body']['server'], ['mockoon1', 'mockoon2']);
-        $this->assertEquals('Bearer executor-secret-key', $response['body']['secret']);
+        $this->assertEquals(200, $headers['status-code']);
+        $this->assertEquals('pong', $body['ping']);
+        $this->assertContains($body['server'], ['mockoon1', 'mockoon2']);
+        $this->assertEquals('Bearer executor-secret-key', $body['secret']);
 
-        $server2 = $response['body']['server'];
+        $server2 = $body['server'];
 
         // Ensure round-robin split traffic
         $this->assertNotEquals($server1, $server2);
 
-        $response = $this->client->call(Client::METHOD_GET, '/v1/ping', [
+        $response = (array) $this->client->call(Client::METHOD_GET, '/v1/ping', [
             'Authorization' => 'Bearer wrong-proxy-secret-key',
         ]);
+        $headers = (array) $response['headers'];
+        $body = (array) $response['body'];
 
         // Ensure secret is nessessary
-        $this->assertEquals(401, $response['headers']['status-code']);
+        $this->assertEquals(401, $headers['status-code']);
     }
 }

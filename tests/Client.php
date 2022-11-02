@@ -57,8 +57,9 @@ class Client
     /**
      * @param array<string, string> $headers
      * @param array<string, mixed> $params
+     * @return array<string, mixed>
      */
-    public function call(string $method, string $path = '', array $headers = [], array $params = [], bool $decode = true): mixed
+    public function call(string $method, string $path = '', array $headers = [], array $params = [], bool $decode = true): array
     {
         $headers            = array_merge($this->headers, $headers);
         $ch                 = curl_init($this->endpoint . $path . (($method == self::METHOD_GET && !empty($params)) ? '?' . http_build_query($params) : ''));

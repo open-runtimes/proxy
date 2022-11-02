@@ -88,6 +88,9 @@ App::setResource('balancing', function (Table $state, Algorithm $algo) {
     $balancing->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
     foreach ($state as $state) {
+        /**
+         * @var array<string,mixed> $state
+         */
         $balancing->addOption(new Option($state));
     }
 
@@ -96,6 +99,9 @@ App::setResource('balancing', function (Table $state, Algorithm $algo) {
 
 function healthCheck(Registry $register, bool $forceShowError = false): void
 {
+    /**
+     * @var Table $state
+     */
     $state = $register->get('state');
 
     $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
@@ -114,7 +120,8 @@ function healthCheck(Registry $register, bool $forceShowError = false): void
         $status = $node->isOnline() ? 'online' : 'offline';
         $hostname = $node->getHostname();
 
-        $oldStatus = $state->exists($hostname) ? $state->get($hostname)['status'] ?? null : null;
+        $oldState = $state->exists($hostname) ? $state->get($hostname) : null;
+        $oldStatus = $oldState !== null ? ((array) $oldState)['status'] : null;
         if ($forceShowError === true || ($oldStatus !== null && $oldStatus !== $status)) {
             Console::success('Executor "' . $node->getHostname() . '" went ' . $status . '.');
         }
@@ -218,8 +225,8 @@ App::wildcard()
         }
 
         $response
-            ->setStatusCode($client->getStatusCode())
-            ->send($client->getBody());
+            ->setStatusCode(\intval($client->getStatusCode()))
+            ->send(\strval($client->getBody()));
     });
 
 App::error()
@@ -264,7 +271,7 @@ App::error()
             ->addHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
             ->addHeader('Expires', '0')
             ->addHeader('Pragma', 'no-cache')
-            ->setStatusCode($code);
+            ->setStatusCode(\intval($code));
 
         $response->json($output);
     });
@@ -277,6 +284,9 @@ Co\run(
                 function () use ($register) {
                     // If no health check, mark all as online
                     if (App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
+                        /**
+                         * @var Table $state
+                         */
                         $state = $register->get('state');
                         $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
 
@@ -312,7 +322,11 @@ Co\run(
             } catch (\Throwable $th) {
                 $code = 500;
 
-                logError($th, "serverError", $app->getResource('logger'));
+                /**
+                 * @var Logger $logger
+                 */
+                $logger = $app->getResource('logger');
+                logError($th, "serverError", $logger);
                 $swooleResponse->setStatusCode($code);
                 $output = [
                     'message' => 'Error: ' . $th->getMessage(),
