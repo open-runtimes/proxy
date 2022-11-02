@@ -4,8 +4,6 @@ namespace OpenRuntimes\Proxy\Health;
 
 use Utopia\App;
 
-use function Swoole\Coroutine\batch;
-
 class Health
 {
     /**
@@ -66,7 +64,10 @@ class Health
             };
         }
 
-        batch($callables);
+        /** @phpstan-ignore-next-line */
+        \Swoole\Coroutine\batch(
+            $callables
+        );
 
         return $this;
     }

@@ -5,8 +5,6 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
 use Swoole\Coroutine\Http\Client;
-use Utopia\Logger\Log;
-use Utopia\Logger\Logger;
 use Swoole\Coroutine\Http\Server;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
@@ -14,16 +12,18 @@ use Swoole\Runtime;
 use Swoole\Table;
 use Swoole\Timer;
 use Utopia\App;
+use Utopia\Logger\Log;
+use Utopia\Logger\Logger;
+use Utopia\Logger\Adapter\AppSignal;
+use Utopia\Logger\Adapter\LogOwl;
+use Utopia\Logger\Adapter\Raygun;
+use Utopia\Logger\Adapter\Sentry;
 use Utopia\Balancing\Algorithm;
 use Utopia\Balancing\Algorithm\Random;
 use Utopia\Balancing\Algorithm\RoundRobin;
 use Utopia\Balancing\Balancing;
 use Utopia\Balancing\Option;
 use Utopia\CLI\Console;
-use Utopia\Logger\Adapter\AppSignal;
-use Utopia\Logger\Adapter\LogOwl;
-use Utopia\Logger\Adapter\Raygun;
-use Utopia\Logger\Adapter\Sentry;
 use Utopia\Registry\Registry;
 use Utopia\Swoole\Request;
 use Utopia\Swoole\Response;
@@ -33,7 +33,6 @@ Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 App::setMode((string) App::getEnv('OPEN_RUNTIMES_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
 
 // Setup Registry
-
 $register = new Registry();
 
 $register->set('state', function () {
@@ -78,7 +77,6 @@ $register->set('algo', function () {
 });
 
 // Setup Resources
-
 App::setResource('state', fn () => $register->get('state'));
 App::setResource('logger', fn () => $register->get('logger'));
 App::setResource('algo', fn () => $register->get('algo'));
@@ -164,45 +162,6 @@ function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Rout
     Console::error('[Error] File: ' . $error->getFile());
     Console::error('[Error] Line: ' . $error->getLine());
 }
-
-\go(function () use ($register) {
-    if (App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK', 'enabled') === 'enabled') {
-        fetchExecutorsState($register, true);
-    } else {
-        $state = $register->get('state');
-
-        // If no health check, mark all as online
-        $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
-
-        foreach ($executors as $executor) {
-            $state->set($executor, [
-                'status' => 'online',
-                'hostname' => $executor,
-                'state' =>  \json_encode([])
-            ]);
-        }
-    }
-});
-
-Console::log('State of executors at startup:');
-
-go(function () use ($register) {
-    $state = $register->get('state');
-
-    $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
-
-    foreach ($executors as $executor) {
-        $executorState = $state->exists($executor) ? $state->get($executor) : null;
-
-        if ($executorState === null) {
-            Console::warning('Executor ' . $executor . ' has unknown state.');
-        } else {
-            Console::log('Executor ' . $executor . ' is ' . ($executorState['status'] ?? 'unknown') . '.');
-        }
-    }
-});
-
-Swoole\Event::wait();
 
 App::init()
     ->inject('request')
@@ -315,10 +274,30 @@ App::error()
 /** @phpstan-ignore-next-line */
 Co\run(
     function () use ($register) {
-        // Keep updating executors state
-        if (App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK', 'enabled') === 'enabled') {
-            Timer::tick(\intval(App::getEnv('OPEN_RUNTIMES_PROXY_PING_INTERVAL', '10000')), fn () => \go(fn () => fetchExecutorsState($register, false)));
-        }
+        /** @phpstan-ignore-next-line */
+        \Swoole\Coroutine\batch([
+                function () use ($register) {
+                    // If no health check, mark all as online
+                    if (App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
+                        $state = $register->get('state');
+                        $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
+
+                        foreach ($executors as $executor) {
+                            $state->set($executor, [
+                                'status' => 'online',
+                                'hostname' => $executor,
+                                'state' =>  \json_encode([])
+                            ]);
+                        }
+
+                        return;
+                    }
+
+                    // Initial health cehck + start timer
+                    fetchExecutorsState($register, true);
+                    Timer::tick(\intval(App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL', '10000')), fn () => \go(fn () => fetchExecutorsState($register, false)));
+                }
+        ]);
 
         $server = new Server('0.0.0.0', 80, false);
 
