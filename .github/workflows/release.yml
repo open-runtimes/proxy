@@ -4,27 +4,31 @@ on:
   release:
     types: [published]
 
+env:
+  IMAGE_NAME: meldiron/ci-test-proxy
+  TAG: ${{ github.event.release.tag_name }}
+  USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+
 jobs:
-  release:
-    name: Release
+  build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 2
+      - name: Check out the repo
+        uses: actions/checkout@v2
 
-    - run: git checkout HEAD^2
+      - name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.USERNAME }}
+          password: ${{ env.PASSWORD }}
 
-    - name: Build and Push Docker Image
-      run: |
-        export COMPOSE_INTERACTIVE_NO_CLI
-        export DOCKER_BUILDKIT=1
-        export COMPOSE_DOCKER_CLI_BUILD=1
-        export BUILDKIT_PROGRESS=plain
-        echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login --username "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-        docker build -t meldiron/ci-test-proxy:${{ github.ref }} .
-        docker build -t meldiron/ci-test-proxy:latest .
-        docker push "meldiron/ci-test-proxy:${{ github.ref }}
-        docker push meldiron/ci-test-proxy:latest
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          build-args: |
+            OPEN_RUNTIMES_PROXY_VERSION=${{ env.TAG }}
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ env.TAG }}
