@@ -14,7 +14,7 @@ class HTTPTest extends TestCase
 
         $this->client
             ->setEndpoint('http://openruntimes-proxy/')
-            ->addHeader('Authorization', 'Bearer proxy-secret-key');
+            ->addHeader('authorization', 'Bearer proxy-secret-key');
         ;
     }
 
@@ -48,7 +48,7 @@ class HTTPTest extends TestCase
         $this->assertNotEquals($server1, $server2);
 
         $response = (array) $this->client->call(Client::METHOD_GET, '/v1/ping', [
-            'Authorization' => 'Bearer wrong-proxy-secret-key',
+            'authorization' => 'Bearer wrong-proxy-secret-key',
         ]);
         $headers = (array) $response['headers'];
         $body = (array) $response['body'];

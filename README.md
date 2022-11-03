@@ -87,7 +87,7 @@ docker compose up -d
 6. Send a HTTP request to proxy server:
 
 ```bash
-curl -H "Authorization: Bearer proxy-secret-key" -X GET http://localhost:9800/
+curl -H "authorization: Bearer proxy-secret-key" -X GET http://localhost:9800/
 ```
 
 Run the command multiple times to see request being proxied between both whoami servers. You can see `Hostname` changing the value.
@@ -110,7 +110,7 @@ docker compose down
 | OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPEN_RUNTIMES_PROXY_HEALTHCHECK is 'enabled'.             |
 | OPEN_RUNTIMES_PROXY_ENV                  | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
 | OPEN_RUNTIMES_PROXY_SECRET               | Secret that needs to be provided in `Authroization` header when communicating with the to proxy.                                          |
-| OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET      | String provided as `Authorization` header by proxy when sending request to executor.                                                      |
+| OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET      | String provided as `authorization` header by proxy when sending request to executor.                                                      |
 | OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER     | Logging provider. Supports `sentry`, `appsignal`, `raygun`, `logowl`. Leave empty for no cloud logging.                                   |
 | OPEN_RUNTIMES_PROXY_LOGGING_CONFIG       | Logging configuration as requested by `utopia-php/logger`.                                                                                |
 

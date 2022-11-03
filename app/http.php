@@ -82,8 +82,8 @@ App::setResource('logger', fn () => $register->get('logger'));
 App::setResource('algorithm', fn () => $register->get('algorithm'));
 
 // Balancing must NOT be registry. This has to run on every request
-App::setResource('balancing', function (Table $state, Algorithm $algo) {
-    $balancing = new Balancing($algo);
+App::setResource('balancing', function (Table $state, Algorithm $algorithm) {
+    $balancing = new Balancing($algorithm);
 
     $balancing->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
@@ -276,35 +276,30 @@ App::error()
 /** @phpstan-ignore-next-line */
 Co\run(
     function () use ($register) {
-        /** @phpstan-ignore-next-line */
-        \Swoole\Coroutine\batch([
-                function () use ($register) {
-                    // If no health check, mark all as online
-                    if (App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
-                        /**
-                         * @var Table $state
-                         */
-                        $state = $register->get('state');
-                        $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
+        // If no health check, mark all as online
+        if (App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
+            /**
+             * @var Table $state
+             */
+            $state = $register->get('state');
+            $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
 
-                        foreach ($executors as $executor) {
-                            $state->set($executor, [
-                                'status' => 'online',
-                                'hostname' => $executor,
-                                'state' =>  \json_encode([])
-                            ]);
-                        }
+            foreach ($executors as $executor) {
+                $state->set($executor, [
+                    'status' => 'online',
+                    'hostname' => $executor,
+                    'state' =>  \json_encode([])
+                ]);
+            }
 
-                        return;
-                    }
+            return;
+        }
 
-                    // Initial health check + start timer
-                    healthCheck($register, true);
+        // Initial health check + start timer
+        healthCheck($register, true);
 
-                    $defaultInterval = '10000'; // 10 seconds
-                    Timer::tick(\intval(App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => \go(fn () => healthCheck($register, false)));
-                }
-        ]);
+        $defaultInterval = '10000'; // 10 seconds
+        Timer::tick(\intval(App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck($register, false));
 
         $server = new Server('0.0.0.0', 80, false);
 
