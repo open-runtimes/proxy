@@ -1,0 +1,58 @@
+# WARNING!
+# This is a development version of the docker-compose.yml file.
+# Avoid using this file in your production environment.
+# We're exposing here sensitive ports and mounting code volumes for rapid development and debugging of the server stack.
+
+x-logging: &x-logging
+  logging:
+    driver: 'json-file'
+    options:
+      max-file: '5'
+      max-size: '10m'
+
+version: '3'
+
+services:
+  openruntimes-proxy:
+    container_name: openruntimes-proxy
+    <<: *x-logging
+    build:
+      context: .
+    networks:
+      servers:
+    ports:
+      - 9800:80
+    volumes:
+      - ./app:/usr/local/app:rw
+      - ./src:/usr/local/src:rw
+      - ./tests:/usr/local/tests:rw
+    environment:
+      - OPEN_RUNTIMES_PROXY_ALGORITHM
+      - OPEN_RUNTIMES_PROXY_EXECUTORS
+      - OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL
+      - OPEN_RUNTIMES_PROXY_ENV
+      - OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET
+      - OPEN_RUNTIMES_PROXY_SECRET
+      - OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER
+      - OPEN_RUNTIMES_PROXY_LOGGING_CONFIG
+      - OPEN_RUNTIMES_PROXY_HEALTHCHECK
+  mockoon1:
+    container_name: mockoon1
+    image: mockoon/cli:2.2.1
+    command: mockoon-cli start --data /data
+    networks:
+      servers:
+    volumes:
+      - ./mockoon.json:/data:ro
+  mockoon2:
+    container_name: mockoon2
+    image: mockoon/cli:2.2.1
+    command: mockoon-cli start --data /data
+    networks:
+      servers:
+    volumes:
+      - ./mockoon.json:/data:ro
+
+networks:
+  servers:
+
