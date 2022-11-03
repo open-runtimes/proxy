@@ -4,8 +4,14 @@ namespace OpenRuntimes\Proxy\Health;
 
 class Node
 {
+    /**
+     * @var string
+     */
     private string $hostname;
 
+    /**
+     * @var bool
+     */
     private bool $online;
 
     /**
@@ -14,6 +20,8 @@ class Node
     private array $state;
 
     /**
+     * @param string $hostname
+     * @param bool $online
      * @param array<string,mixed> $state
      */
     public function __construct(string $hostname, bool $online = false, array $state = [])
@@ -23,11 +31,22 @@ class Node
         $this->state = $state;
     }
 
+    /**
+     * Get Node hostname.
+     *
+     * @return string
+     */
     public function getHostname(): string
     {
         return $this->hostname;
     }
 
+    /**
+     * Set Node availability status.
+     *
+     * @param bool $online
+     * @return self
+     */
     public function setOnline(bool $online): self
     {
         $this->online = $online;
@@ -35,7 +54,20 @@ class Node
     }
 
     /**
+     * Get Node availability status.
+     *
+     * @return bool
+     */
+    public function isOnline(): bool
+    {
+        return $this->online;
+    }
+
+    /**
+     * Set Node state.
+     *
      * @param array<string,mixed> $state
+     * @return self
      */
     public function setState(array $state): self
     {
@@ -43,12 +75,9 @@ class Node
         return $this;
     }
 
-    public function isOnline(): bool
-    {
-        return $this->online;
-    }
-
     /**
+     * Get Node state.
+     *
      * @return array<string,mixed>
      */
     public function getState(): array

@@ -11,12 +11,23 @@ class Health
      */
     private array $nodes = [];
 
+    /**
+     * Add node to ping during health check.
+     *
+     * @param Node $node
+     * @return self
+     */
     public function addNode(Node $node): self
     {
         $this->nodes[] = $node;
         return $this;
     }
 
+    /**
+     * Run health checks on nodes, sending HTTP requests.
+     *
+     * @return self
+     */
     public function run(): self
     {
         $callables = [];
@@ -73,6 +84,8 @@ class Health
     }
 
     /**
+     * Get nodes. Useful after running health check to get status.
+     *
      * @return Node[]
      */
     public function getNodes(): array
