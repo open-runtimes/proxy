@@ -54,7 +54,7 @@ $register->set('logger', function () {
         $adapter = match ($providerName) {
             'sentry' => new Sentry($providerConfig),
             'raygun' => new Raygun($providerConfig),
-            'logown' => new LogOwl($providerConfig),
+            'logowl' => new LogOwl($providerConfig),
             'appsignal' => new AppSignal($providerConfig),
             default => throw new Exception('Provider "' . $providerName . '" not supported.')
         };
@@ -65,7 +65,7 @@ $register->set('logger', function () {
     return $logger;
 });
 
-$register->set('algo', function () {
+$register->set('algorithm', function () {
     $algoType = App::getEnv('OPEN_RUNTIMES_PROXY_ALGORITHM', '');
     $algo = match ($algoType) {
         'round-robin' => new RoundRobin(0),
@@ -79,7 +79,7 @@ $register->set('algo', function () {
 // Setup Resources
 App::setResource('state', fn () => $register->get('state'));
 App::setResource('logger', fn () => $register->get('logger'));
-App::setResource('algo', fn () => $register->get('algo'));
+App::setResource('algorithm', fn () => $register->get('algorithm'));
 
 // Balancing must NOT be registry. This has to run on every request
 App::setResource('balancing', function (Table $state, Algorithm $algo) {
@@ -95,7 +95,7 @@ App::setResource('balancing', function (Table $state, Algorithm $algo) {
     }
 
     return $balancing;
-}, ['state', 'algo']);
+}, ['state', 'algorithm']);
 
 function healthCheck(Registry $register, bool $forceShowError = false): void
 {
@@ -175,10 +175,7 @@ App::init()
     ->action(function (Request $request) {
         $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
 
-        if (empty($secretKey)) {
-            throw new Exception('Incorrect proxy key.', 401);
-        }
-        if ($secretKey !== App::getEnv('OPEN_RUNTIMES_PROXY_SECRET', '')) {
+        if (empty($secretKey) || $secretKey !== App::getEnv('OPEN_RUNTIMES_PROXY_SECRET', '')) {
             throw new Exception('Incorrect proxy key.', 401);
         }
     });
@@ -301,7 +298,7 @@ Co\run(
                         return;
                     }
 
-                    // Initial health cehck + start timer
+                    // Initial health check + start timer
                     healthCheck($register, true);
 
                     $defaultInterval = '10000'; // 10 seconds

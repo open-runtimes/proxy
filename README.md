@@ -5,10 +5,9 @@
 ---
 
 [![Discord](https://img.shields.io/discord/937092945713172480?label=discord&style=flat-square)](https://discord.gg/mkZcevnxuf)
-[![Build Status](https://github.com/utopia-php/balancing/actions/workflows/tester.yml/badge.svg)](https://github.com/utopia-php/balancing/actions/workflows/tester.yml)
+[![Build Status](https://github.com/open-runtimes/proxy/actions/workflows/tests.yml/badge.svg)](https://github.com/open-runtimes/proxy/actions/workflows/tests.yml)
 [![Twitter Account](https://img.shields.io/twitter/follow/appwrite?color=00acee&label=twitter&style=flat-square)](https://twitter.com/appwrite)
-
-<!-- [![Docker Pulls](https://img.shields.io/docker/pulls/appwrite/appwrite?color=f02e65&style=flat-square)](https://hub.docker.com/r/appwrite/appwrite) -->
+[![Docker Pulls](https://img.shields.io/docker/pulls/openruntimes/proxy?color=f02e65&style=flat-square)](https://hub.docker.com/r/openruntimes/proxy)
 
 Proxy server for [Open Runtimes](https://github.com/open-runtimes/open-runtimes), a runtime environments for serverless cloud computing for multiple coding languages.
 
@@ -20,11 +19,7 @@ The proxy is responsible for checking health of executors, and proxying requests
 * **Performance** - Coroutine-style HTTP servers allows asynchronous operations without blocking. We. Run. Fast! ⚡
 * **Open Source** - Released under the MIT license, free to use and extend.
 
-## Getting Started - Open Runtimes Executor
-
-> 🚧 Getting started with Open Runtimes Executor coming soon.
-
-## Getting Started - Generic Proxy
+## Getting Started
 
 1. Pull Open Runtimes Proxy image:
 
@@ -107,17 +102,17 @@ docker compose down
 
 ## Environment variables
 
-| Variable name                           | Description                                                                                                                               |
-|-----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| OPEN_RUNTIMES_PROXY_ALGORITHM           | Proxying algorithm. Supports `round-robin`, `random`.                                                                                     |
-| OPEN_RUNTIMES_PROXY_EXECUTORS           | Comma-separated hostnames of servers under the proxy.                                                                                     |
-| OPEN_RUNTIMES_PROXY_HEALTHCHECK | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
-| OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL       | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPEN_RUNTIMES_PROXY_HEALTHCHECK is 'enabled'.     |
-| OPEN_RUNTIMES_PROXY_ENV                 | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
-| OPEN_RUNTIMES_PROXY_SECRET              | Secret that needs to be provided in `Authroization` header when talking to proxy.                                                         |
-| OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET     | String provided as `Authorization` header by proxy when sending request to executor.                                                      |
-| OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER    | Logging provider. Supports `sentry`, `appsignal`, `raygun`, `logown`. Leave empty for no cloud logging.                                   |
-| OPEN_RUNTIMES_PROXY_LOGGING_CONFIG      | Logging configuration as requested by `utopia-php/logger`.                                                                                |
+| Variable name                            | Description                                                                                                                               |
+|------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| OPEN_RUNTIMES_PROXY_ALGORITHM            | Proxying algorithm. Supports `round-robin`, `random`.                                                                                     |
+| OPEN_RUNTIMES_PROXY_EXECUTORS            | Comma-separated hostnames of servers under the proxy.                                                                                     |
+| OPEN_RUNTIMES_PROXY_HEALTHCHECK          | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
+| OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPEN_RUNTIMES_PROXY_HEALTHCHECK is 'enabled'.             |
+| OPEN_RUNTIMES_PROXY_ENV                  | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
+| OPEN_RUNTIMES_PROXY_SECRET               | Secret that needs to be provided in `Authroization` header when communicating with the to proxy.                                          |
+| OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET      | String provided as `Authorization` header by proxy when sending request to executor.                                                      |
+| OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER     | Logging provider. Supports `sentry`, `appsignal`, `raygun`, `logowl`. Leave empty for no cloud logging.                                   |
+| OPEN_RUNTIMES_PROXY_LOGGING_CONFIG       | Logging configuration as requested by `utopia-php/logger`.                                                                                |
 
 ## Contributing
 
