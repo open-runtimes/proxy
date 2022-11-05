@@ -114,20 +114,6 @@ To run static code analysis, you need to run PHPStan:
 composer check
 ```
 
-## Building
-
-To build proxy as docker image, run following command:
-
-```bash
-docker build -t openruntimes/proxy:dev .
-```
-
-To push image to Docker Hub:
-
-```
-docker push openruntimes/proxy:dev
-```
-
 ## Introducing New Features
 
 We would 💖 you to contribute to Open Runtimes, but we would also like to make sure Open Runtimes is as great as possible and loyal to its vision and mission statement 🙏.
