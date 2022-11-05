@@ -1,5 +1,5 @@
 tasks:
-  - name: openruntimes/proxy
+  - name: open-runtimes/proxy
     init: |
       docker compose pull
       docker compose build
