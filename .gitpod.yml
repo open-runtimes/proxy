@@ -1,5 +1,5 @@
 tasks:
-  - name: PHP preparations
+  - name: open-runtimes/proxy
     init: |
       docker compose pull
       docker compose build
