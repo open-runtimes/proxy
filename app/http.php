@@ -18,11 +18,12 @@ use Utopia\Logger\Adapter\AppSignal;
 use Utopia\Logger\Adapter\LogOwl;
 use Utopia\Logger\Adapter\Raygun;
 use Utopia\Logger\Adapter\Sentry;
-use Utopia\Balancing\Algorithm;
-use Utopia\Balancing\Algorithm\Random;
-use Utopia\Balancing\Algorithm\RoundRobin;
-use Utopia\Balancing\Balancing;
-use Utopia\Balancing\Option;
+use Utopia\Balancer\Algorithm;
+use Utopia\Balancer\Algorithm\Random;
+use Utopia\Balancer\Algorithm\RoundRobin;
+use Utopia\Balancer\Balancer;
+use Utopia\Balancer\Group;
+use Utopia\Balancer\Option;
 use Utopia\CLI\Console;
 use Utopia\Registry\Registry;
 use Utopia\Swoole\Request;
@@ -83,21 +84,67 @@ App::setResource('state', fn () => $register->get('state'));
 App::setResource('logger', fn () => $register->get('logger'));
 App::setResource('algorithm', fn () => $register->get('algorithm'));
 
-// Balancing must NOT be registry. This has to run on every request
-App::setResource('balancing', function (Table $state, Algorithm $algorithm) {
-    $balancing = new Balancing($algorithm);
+// Balancer must NOT be registry. This has to run on every request
+App::setResource('balancerGroup', function (Table $state, Algorithm $algorithm, Request $request) {
+    $runtimeId = $request->getHeader('x-opr-runtime-id', '');
 
-    $balancing->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+    $group = new Group();
+
+    // Cold-started-only options
+    $balancer1 = new Balancer($algorithm);
+
+    // Only online executors
+    $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+
+    // Only low host-cpu usage
+    $balancer1->addFilter(function ($option) {
+        /**
+         * @var array<string,mixed> $state
+         */
+        $state = \json_decode($option->getState('state', '{}'), true);
+        return ($state['usage'] ?? 0) < 80;
+    });
+
+    // Only low runtime-cpu usage
+    if (!empty($runtimeId)) {
+        $balancer1->addFilter(function ($option) use ($runtimeId) {
+            /**
+             * @var array<string,mixed> $state
+             */
+            $state = \json_decode($option->getState('state', '{}'), true);
+
+            /**
+             * @var array<string,mixed> $runtimes
+             */
+            $runtimes = $state['runtimes'];
+
+            /**
+             * @var array<string,mixed> $runtime
+             */
+            $runtime = $runtimes[$runtimeId] ?? [];
+
+            return ($runtime['usage'] ?? 0) < 80;
+        });
+    }
+
+    // Any options
+    $balancer2 = new Balancer($algorithm);
+    $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
     foreach ($state as $stateItem) {
         /**
          * @var array<string,mixed> $stateItem
          */
-        $balancing->addOption(new Option($stateItem));
+        $balancing1->addOption(new Option($stateItem));
+        $balancing2->addOption(new Option($stateItem));
     }
 
-    return $balancing;
-}, ['state', 'algorithm']);
+    $group
+        ->add($balancer1)
+        ->add($balancer2);
+
+    return $group;
+}, ['state', 'algorithm', 'request']);
 
 function healthCheck(Registry $register, bool $forceShowError = false): void
 {
@@ -183,18 +230,12 @@ App::init()
     });
 
 App::wildcard()
-    ->inject('balancing')
+    ->inject('balancerGroup')
     ->inject('state')
     ->inject('request')
     ->inject('response')
-    ->action(function (Balancing $balancing, Table $state, Request $request, Response $response) {
-        // TODO: @Meldiron Use RuntimeID (from body or header) to prefer executors with warm runtime
-        /*
-        $body = \json_decode($request->getRawPayload() ? $request->getRawPayload() : '{}', true);
-        $runtimeId = $body['runtimeId'] ?? null;
-        */
-
-        $option = $balancing->run();
+    ->action(function (Group $balancer, Table $state, Request $request, Response $response) {
+        $option = $balancer->run();
 
         if ($option === null) {
             throw new Exception('No online executor found', 404);
@@ -237,7 +278,7 @@ App::wildcard()
         // Header used for testing
         if (App::isDevelopment()) {
             $headers = \array_merge($headers, [
-                'x-open-runtimes-executor-hostname' => $hostname
+                'x-opr-executor-hostname' => $hostname
             ]);
         }
 

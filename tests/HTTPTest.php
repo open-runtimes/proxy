@@ -18,7 +18,7 @@ class HTTPTest extends TestCase
         ;
     }
 
-    public function testBalancing(): void
+    public function testBalancer(): void
     {
         $response = (array) $this->client->call(Client::METHOD_GET, '/v1/ping');
         $headers = (array) $response['headers'];
