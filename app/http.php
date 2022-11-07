@@ -208,7 +208,7 @@ App::wildcard()
         // Optimistic update. Mark runtime up instantly to prevent race conditions
         // Next health check with confirm it started well, and update usage stats
         $runtimeId = $request->getHeader('x-opr-runtime-id', '');
-        if ($runtimeId !== '') {
+        if (!empty($runtimeId)) {
             /**
              * @var array<string,mixed> $stateItem
              */
