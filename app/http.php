@@ -102,7 +102,7 @@ App::setResource('balancerGroup', function (Table $state, Algorithm $algorithm, 
          * @var array<string,mixed> $state
          */
         $state = \json_decode($option->getState('state', '{}'), true);
-        return ($state['usage'] ?? 100) < 80;
+        return ($state['usage'] ?? 0) < 80;
     });
 
     // Only low runtime-cpu usage
@@ -123,7 +123,7 @@ App::setResource('balancerGroup', function (Table $state, Algorithm $algorithm, 
              */
             $runtime = $runtimes[$runtimeId] ?? [];
 
-            return ($runtime['usage'] ?? 100) < 80;
+            return ($runtime['usage'] ?? 0) < 80;
         });
     }
 
