@@ -89,11 +89,11 @@ App::setResource('balancing', function (Table $state, Algorithm $algorithm) {
 
     $balancing->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
-    foreach ($state as $state) {
+    foreach ($state as $stateItem) {
         /**
-         * @var array<string,mixed> $state
+         * @var array<string,mixed> $stateItem
          */
-        $balancing->addOption(new Option($state));
+        $balancing->addOption(new Option($stateItem));
     }
 
     return $balancing;
@@ -184,9 +184,10 @@ App::init()
 
 App::wildcard()
     ->inject('balancing')
+    ->inject('state')
     ->inject('request')
     ->inject('response')
-    ->action(function (Balancing $balancing, Request $request, Response $response) {
+    ->action(function (Balancing $balancing, Table $state, Request $request, Response $response) {
         // TODO: @Meldiron Use RuntimeID (from body or header) to prefer executors with warm runtime
         /*
         $body = \json_decode($request->getRawPayload() ? $request->getRawPayload() : '{}', true);
@@ -199,7 +200,33 @@ App::wildcard()
             throw new Exception('No online executor found', 404);
         }
 
+        /**
+         * @var string $hostname
+         */
         $hostname = $option->getState('hostname') ?? '';
+
+        // Optimistic update. Mark runtime up instantly to prevent race conditions
+        // Next health check with confirm it started well, and update usage stats
+        $runtimeId = $request->getHeader('x-opr-runtime-id', '');
+        if ($runtimeId !== '') {
+            /**
+             * @var array<string,mixed> $stateItem
+             */
+            $stateItem = $state->get($hostname);
+
+            if ($stateItem['runtimes'] ?? null === null) {
+                $stateItem['runtimes'] = [];
+            }
+
+            if ($stateItem['runtimes'][$runtimeId] ?? null === null) {
+                /** @phpstan-ignore-next-line */
+                $stateItem['runtimes'][$runtimeId] = [];
+            }
+
+            $stateItem['runtimes'][$runtimeId]['status'] = 'pass';
+            $state->set($hostname, $stateItem);
+        }
+
 
         $client = new Client($hostname, 80);
         $client->setMethod($request->getMethod());
