@@ -78,7 +78,7 @@ docker compose up -d
 
 You can now visit `http://localhost:9800/v1/ping` to see a response from Mockoon that was proxied over Open Runtimes Proxy.
 
-To text with Open Rutimes Executor instead, you can add it to `docker-compose.yml` and replace hostnames in `.env` variable `OPEN_RUNTIMES_PROXY_EXECUTORS`.
+To text with Open Rutimes Executor instead, you can add it to `docker-compose.yml` and replace hostnames in `.env` variable `OPR_PROXY_EXECUTORS`.
 
 ## Testing
 
