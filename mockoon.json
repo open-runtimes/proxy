@@ -15,7 +15,7 @@
             "responses": [
                 {
                     "uuid": "e69e9ba2-6392-4c05-b5c7-1e4a71d8a19b",
-                    "body": "{\n  \"status\": \"pass\",\n  \"hostUsage\": {{int 0 100}},\n  \"functionsUsage\": {\n    {{#repeat 0 5 comma=true}}\n    \"runtime{{@index}}\": {{int 0 100}}\n    {{/repeat}}\n  }\n}",
+                    "body": "{\n  \"status\": \"pass\",\n  \"usage\": {{int 0 100}},\n  \"runtimes\": {\n    {{#repeat 0 5 comma=true}}\n    \"runtime{{@index}}\": { \"status\":\"pass\", \"usage\":{{int 0 100}} }\n    {{/repeat}}\n  }\n}",
                     "latency": 0,
                     "statusCode": 200,
                     "label": "",
@@ -42,7 +42,7 @@
             "responses": [
                 {
                     "uuid": "2f19044b-ffe3-45f7-974d-128211f061a7",
-                    "body": "{\"ping\":\"pong\",\"server\":\"{{header 'x-open-runtimes-executor-hostname' 'UNKNOWN'}}\",\"secret\":\"{{header 'Authorization' 'UNKNOWN'}}\"}",
+                    "body": "{\"ping\":\"pong\",\"server\":\"{{header 'x-opr-executor-hostname' 'UNKNOWN'}}\",\"secret\":\"{{header 'Authorization' 'UNKNOWN'}}\"}",
                     "latency": 0,
                     "statusCode": 200,
                     "label": "",

@@ -4,21 +4,15 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "8c12a8a1ecb78f6ec99ac2955809f1c5",
+    "content-hash": "ead66ebbeb5cd91ff1cd1a868c1e4913",
     "packages": [
         {
-            "name": "utopia-php/balancing",
-            "version": "0.2.0",
+            "name": "utopia-php/balancer",
+            "version": "0.3.0",
             "source": {
                 "type": "git",
-                "url": "https://github.com/utopia-php/balancing.git",
-                "reference": "ab6faf326ef6f7dacb7f003f1f157898290d0d45"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/balancing/zipball/ab6faf326ef6f7dacb7f003f1f157898290d0d45",
-                "reference": "ab6faf326ef6f7dacb7f003f1f157898290d0d45",
-                "shasum": ""
+                "url": "https://github.com/utopia-php/balancer.git",
+                "reference": "110e1f1d9bd53254994b42cb2ce180c6e0ba6693"
             },
             "require": {
                 "php": ">=8.0"
@@ -31,15 +25,29 @@
             "type": "library",
             "autoload": {
                 "psr-4": {
-                    "Utopia\\Balancing\\": "src/Balancing"
+                    "Utopia\\Balancer\\": "src/Balancer"
                 }
             },
-            "notification-url": "https://packagist.org/downloads/",
+            "scripts": {
+                "lint": [
+                    "./vendor/bin/pint --preset psr12 --test"
+                ],
+                "format": [
+                    "./vendor/bin/pint --preset psr12"
+                ],
+                "check": [
+                    "./vendor/bin/phpstan analyse --level max src tests"
+                ],
+                "test": [
+                    "./vendor/bin/phpunit --configuration phpunit.xml"
+                ]
+            },
             "license": [
                 "MIT"
             ],
             "description": "A simple library to balance choices between multiple options.",
             "keywords": [
+                "balancer",
                 "balancer",
                 "balancing",
                 "framework",
@@ -47,11 +55,7 @@
                 "upf",
                 "utopia"
             ],
-            "support": {
-                "issues": "https://github.com/utopia-php/balancing/issues",
-                "source": "https://github.com/utopia-php/balancing/tree/0.2.0"
-            },
-            "time": "2022-11-02T09:47:00+00:00"
+            "time": "2022-11-07T16:57:36+00:00"
         },
         {
             "name": "utopia-php/cli",
@@ -2233,5 +2237,5 @@
     "platform-overrides": {
         "php": "8.0"
     },
-    "plugin-api-version": "2.2.0"
+    "plugin-api-version": "2.3.0"
 }
