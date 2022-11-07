@@ -67,7 +67,7 @@ $ git push origin [name_of_your_new_branch]
 To run Open Runtimes proxy, make sure to install PHP dependencies:
 
 ```bash
-docker run --rm --interactive --tty --volume $PWD:/app composer install
+docker run --rm --interactive --tty --volume $PWD:/app composer composer install --profile --ignore-platform-reqs
 ```
 
 Next start the Docker Compose stack that includes a proxy, and 2 Mockoon servers:
@@ -78,7 +78,7 @@ docker compose up -d
 
 You can now visit `http://localhost:9800/v1/ping` to see a response from Mockoon that was proxied over Open Runtimes Proxy.
 
-To text with Open Rutimes Executor instead, you can add it to `docker-compose.yml` and replace hostnames in `.env` variable `OPEN_RUNTIMES_PROXY_EXECUTORS`.
+To test with Open Rutimes Executor instead, you can add it to `docker-compose.yml` and replace hostnames in `.env` variable `OPEN_RUNTIMES_PROXY_EXECUTORS`.
 
 ## Testing
 
@@ -112,20 +112,6 @@ To run static code analysis, you need to run PHPStan:
 
 ```bash
 composer check
-```
-
-## Building
-
-To build proxy as docker image, run following command:
-
-```bash
-docker build -t openruntimes/proxy:dev .
-```
-
-To push image to Docker Hub:
-
-```
-docker push openruntimes/proxy:dev
 ```
 
 ## Introducing New Features
