@@ -212,14 +212,13 @@ App::wildcard()
             /**
              * @var array<string,mixed> $stateItem
              */
-            $stateItem = $state->get($hostname);
+            $stateItem = \json_decode($state->get($hostname)['state'] ?? '{}', true);
 
-            if ($stateItem['runtimes'] ?? null === null) {
+            if ($stateItem['runtimes'] === null) {
                 $stateItem['runtimes'] = [];
             }
 
-            if ($stateItem['runtimes'][$runtimeId] ?? null === null) {
-                /** @phpstan-ignore-next-line */
+            if ($stateItem['runtimes'][$runtimeId] === null) {
                 $stateItem['runtimes'][$runtimeId] = [];
             }
 
