@@ -32,13 +32,13 @@ use function Swoole\Coroutine\run;
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
-App::setMode((string) App::getEnv('OPEN_RUNTIMES_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
+App::setMode((string) App::getEnv('OPR_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
 
 // Setup Registry
 $register = new Registry();
 
 $register->set('state', function () {
-    $count = \count(\explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', '')));
+    $count = \count(\explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', '')));
     $state = new Table($count);
     $state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
     $state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
@@ -48,8 +48,8 @@ $register->set('state', function () {
 });
 
 $register->set('logger', function () {
-    $providerName = App::getEnv('OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER', '');
-    $providerConfig = App::getEnv('OPEN_RUNTIMES_PROXY_LOGGING_CONFIG', '');
+    $providerName = App::getEnv('OPR_PROXY_LOGGING_PROVIDER', '');
+    $providerConfig = App::getEnv('OPR_PROXY_LOGGING_CONFIG', '');
     $logger = null;
 
     if (!empty($providerName) && !empty($providerConfig) && Logger::hasProvider($providerName)) {
@@ -68,7 +68,7 @@ $register->set('logger', function () {
 });
 
 $register->set('algorithm', function () {
-    $algoType = App::getEnv('OPEN_RUNTIMES_PROXY_ALGORITHM', '');
+    $algoType = App::getEnv('OPR_PROXY_ALGORITHM', '');
     $algo = match ($algoType) {
         'round-robin' => new RoundRobin(0),
         'random' => new Random(),
@@ -106,7 +106,7 @@ function healthCheck(Registry $register, bool $forceShowError = false): void
      */
     $state = $register->get('state');
 
-    $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
+    $executors = \explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', ''));
 
     $health = new Health();
 
@@ -139,7 +139,7 @@ function healthCheck(Registry $register, bool $forceShowError = false): void
 function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Route $route = null): void
 {
     if ($logger) {
-        $version = (string) App::getEnv('OPEN_RUNTIMES_PROXY_VERSION', 'UNKNOWN');
+        $version = (string) App::getEnv('OPR_PROXY_VERSION', 'UNKNOWN');
 
         $log = new Log();
         $log->setNamespace('proxy');
@@ -177,7 +177,7 @@ App::init()
     ->action(function (Request $request) {
         $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
 
-        if (empty($secretKey) || $secretKey !== App::getEnv('OPEN_RUNTIMES_PROXY_SECRET', '')) {
+        if (empty($secretKey) || $secretKey !== App::getEnv('OPR_PROXY_SECRET', '')) {
             throw new Exception('Incorrect proxy key.', 401);
         }
     });
@@ -205,7 +205,7 @@ App::wildcard()
         $client->setMethod($request->getMethod());
 
         $headers = \array_merge($request->getHeaders(), [
-            'authorization' => 'Bearer ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
+            'authorization' => 'Bearer ' . App::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
         ]);
 
         // Header used for testing
@@ -263,7 +263,7 @@ App::error()
             'file' => $error->getFile(),
             'line' => $error->getLine(),
             'trace' => $error->getTrace(),
-            'version' => App::getEnv('OPEN_RUNTIMES_PROXY_VERSION', 'UNKNOWN')
+            'version' => App::getEnv('OPR_PROXY_VERSION', 'UNKNOWN')
         ];
 
         $response
@@ -277,12 +277,12 @@ App::error()
 
 run(function () use ($register) {
     // If no health check, mark all as online
-    if (App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
+    if (App::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
         /**
          * @var Table $state
          */
         $state = $register->get('state');
-        $executors = \explode(',', (string) App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTORS', ''));
+        $executors = \explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', ''));
 
         foreach ($executors as $executor) {
             $state->set($executor, [
@@ -299,7 +299,7 @@ run(function () use ($register) {
     healthCheck($register, true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(App::getEnv('OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck($register, false));
+    Timer::tick(\intval(App::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck($register, false));
 
     $server = new Server('0.0.0.0', 80, false);
 

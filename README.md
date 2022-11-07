@@ -43,15 +43,15 @@ services:
     ports:
       - 9800:80
     environment:
-      - OPEN_RUNTIMES_PROXY_ALGORITHM
-      - OPEN_RUNTIMES_PROXY_EXECUTORS
-      - OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL
-      - OPEN_RUNTIMES_PROXY_ENV
-      - OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET
-      - OPEN_RUNTIMES_PROXY_SECRET
-      - OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER
-      - OPEN_RUNTIMES_PROXY_LOGGING_CONFIG
-      - OPEN_RUNTIMES_PROXY_HEALTHCHECK
+      - OPR_PROXY_ALGORITHM
+      - OPR_PROXY_EXECUTORS
+      - OPR_PROXY_HEALTHCHECK_INTERVAL
+      - OPR_PROXY_ENV
+      - OPR_PROXY_EXECUTOR_SECRET
+      - OPR_PROXY_SECRET
+      - OPR_PROXY_LOGGING_PROVIDER
+      - OPR_PROXY_LOGGING_CONFIG
+      - OPR_PROXY_HEALTHCHECK
   whoami1:
     hostname: whoami1
     image: containous/whoami
@@ -65,15 +65,15 @@ services:
 4. Create `.env` file:
 
 ```
-OPEN_RUNTIMES_PROXY_ALGORITHM=round-robin
-OPEN_RUNTIMES_PROXY_EXECUTORS=whoami1,whoami2
-OPEN_RUNTIMES_PROXY_HEALTHCHECK=disabled
-OPEN_RUNTIMES_PROXY_SECRET=proxy-secret-key
-OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL=5000
-OPEN_RUNTIMES_PROXY_ENV=development
-OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET=executor-secret-key
-OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER=
-OPEN_RUNTIMES_PROXY_LOGGING_CONFIG=
+OPR_PROXY_ALGORITHM=round-robin
+OPR_PROXY_EXECUTORS=whoami1,whoami2
+OPR_PROXY_HEALTHCHECK=disabled
+OPR_PROXY_SECRET=proxy-secret-key
+OPR_PROXY_HEALTHCHECK_INTERVAL=5000
+OPR_PROXY_ENV=development
+OPR_PROXY_EXECUTOR_SECRET=executor-secret-key
+OPR_PROXY_LOGGING_PROVIDER=
+OPR_PROXY_LOGGING_CONFIG=
 ```
 
 > Notice we disabled health check. We recommend keeping it `enabled` and implementing proper health check endpoint
@@ -92,7 +92,7 @@ curl -H "authorization: Bearer proxy-secret-key" -X GET http://localhost:9800/
 
 Run the command multiple times to see request being proxied between both whoami servers. You can see `Hostname` changing the value.
 
-> Noitce we provided authorization header as configured in `.env` in `OPEN_RUNTIMES_PROXY_SECRET`.
+> Noitce we provided authorization header as configured in `.env` in `OPR_PROXY_SECRET`.
 
 7. Stop Docker containers:
 
@@ -104,15 +104,15 @@ docker compose down
 
 | Variable name                            | Description                                                                                                                               |
 |------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| OPEN_RUNTIMES_PROXY_ALGORITHM            | Proxying algorithm. Supports `round-robin`, `random`.                                                                                     |
-| OPEN_RUNTIMES_PROXY_EXECUTORS            | Comma-separated hostnames of servers under the proxy.                                                                                     |
-| OPEN_RUNTIMES_PROXY_HEALTHCHECK          | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
-| OPEN_RUNTIMES_PROXY_HEALTHCHECK_INTERVAL | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPEN_RUNTIMES_PROXY_HEALTHCHECK is 'enabled'.             |
-| OPEN_RUNTIMES_PROXY_ENV                  | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
-| OPEN_RUNTIMES_PROXY_SECRET               | Secret that needs to be provided in `Authroization` header when communicating with the to proxy.                                          |
-| OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET      | String provided as `authorization` header by proxy when sending request to executor.                                                      |
-| OPEN_RUNTIMES_PROXY_LOGGING_PROVIDER     | Logging provider. Supports `sentry`, `appsignal`, `raygun`, `logowl`. Leave empty for no cloud logging.                                   |
-| OPEN_RUNTIMES_PROXY_LOGGING_CONFIG       | Logging configuration as requested by `utopia-php/logger`.                                                                                |
+| OPR_PROXY_ALGORITHM            | Proxying algorithm. Supports `round-robin`, `random`.                                                                                     |
+| OPR_PROXY_EXECUTORS            | Comma-separated hostnames of servers under the proxy.                                                                                     |
+| OPR_PROXY_HEALTHCHECK          | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
+| OPR_PROXY_HEALTHCHECK_INTERVAL | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPR_PROXY_HEALTHCHECK is 'enabled'.             |
+| OPR_PROXY_ENV                  | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
+| OPR_PROXY_SECRET               | Secret that needs to be provided in `Authroization` header when communicating with the to proxy.                                          |
+| OPR_PROXY_EXECUTOR_SECRET      | String provided as `authorization` header by proxy when sending request to executor.                                                      |
+| OPR_PROXY_LOGGING_PROVIDER     | Logging provider. Supports `sentry`, `appsignal`, `raygun`, `logowl`. Leave empty for no cloud logging.                                   |
+| OPR_PROXY_LOGGING_CONFIG       | Logging configuration as requested by `utopia-php/logger`.                                                                                |
 
 ## Contributing
 

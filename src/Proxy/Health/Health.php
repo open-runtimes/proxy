@@ -46,7 +46,7 @@ class Health
                     \curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                     \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
                     \curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'authorization: Bearer ' . App::getEnv('OPEN_RUNTIMES_PROXY_EXECUTOR_SECRET', '')
+                        'authorization: Bearer ' . App::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
                     ]);
 
                     $executorResponse = \curl_exec($ch);
