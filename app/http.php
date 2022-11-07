@@ -135,8 +135,8 @@ App::setResource('balancerGroup', function (Table $state, Algorithm $algorithm, 
         /**
          * @var array<string,mixed> $stateItem
          */
-        $balancing1->addOption(new Option($stateItem));
-        $balancing2->addOption(new Option($stateItem));
+        $balancer1->addOption(new Option($stateItem));
+        $balancer2->addOption(new Option($stateItem));
     }
 
     $group
