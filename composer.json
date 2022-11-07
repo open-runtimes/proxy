@@ -19,12 +19,6 @@
         "check": "./vendor/bin/phpstan analyse --level max -c phpstan.neon app src tests",
         "test": "./vendor/bin/phpunit --configuration phpunit.xml --debug"
     },
-    "repositories": [
-        {
-            "url": "https://github.com/utopia-php/balancer.git",
-            "type": "git"
-        }
-    ],
     "require": {
         "php": ">=8.0.0",
         "ext-curl": "*",

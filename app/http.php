@@ -106,7 +106,7 @@ App::setResource('balancerGroup', function (Table $state, Algorithm $algorithm, 
     });
 
     // Only low runtime-cpu usage
-    if ($runtimeId !== '') {
+    if (!empty($runtimeId)) {
         $balancer1->addFilter(function ($option) use ($runtimeId) {
             /**
              * @var array<string,mixed> $state
