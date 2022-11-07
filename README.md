@@ -11,7 +11,7 @@
 
 Proxy server for [Open Runtimes](https://github.com/open-runtimes/open-runtimes), a runtime environments for serverless cloud computing for multiple coding languages.
 
-The proxy is responsible for checking health of executors, and proxying requests between them based on selected strategy, such as round-robin. Proxy is stateless and can be scaled horizontally when a load balanced is introduced in front of it.
+The proxy is responsible for checking health of executors, and proxying requests between them based on selected strategy, such as round-robin. Proxy is stateless and can be scaled horizontally when a load balancer is introduced in front of it. You could use this proxy with any HTTP services but we highly recommend using it with [Open Runtimes Executor](https://github.com/open-runtimes/executor).
 
 ## Features
 

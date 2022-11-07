@@ -28,6 +28,8 @@ use Utopia\Registry\Registry;
 use Utopia\Swoole\Request;
 use Utopia\Swoole\Response;
 
+use function Swoole\Coroutine\run;
+
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
 App::setMode((string) App::getEnv('OPR_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
@@ -273,66 +275,63 @@ App::error()
         $response->json($output);
     });
 
-/** @phpstan-ignore-next-line */
-Co\run(
-    function () use ($register) {
-        // If no health check, mark all as online
-        if (App::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
-            /**
-             * @var Table $state
-             */
-            $state = $register->get('state');
-            $executors = \explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', ''));
+run(function () use ($register) {
+    // If no health check, mark all as online
+    if (App::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
+        /**
+         * @var Table $state
+         */
+        $state = $register->get('state');
+        $executors = \explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', ''));
 
-            foreach ($executors as $executor) {
-                $state->set($executor, [
-                    'status' => 'online',
-                    'hostname' => $executor,
-                    'state' =>  \json_encode([])
-                ]);
-            }
-
-            return;
+        foreach ($executors as $executor) {
+            $state->set($executor, [
+                'status' => 'online',
+                'hostname' => $executor,
+                'state' =>  \json_encode([])
+            ]);
         }
 
-        // Initial health check + start timer
-        healthCheck($register, true);
-
-        $defaultInterval = '10000'; // 10 seconds
-        Timer::tick(\intval(App::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck($register, false));
-
-        $server = new Server('0.0.0.0', 80, false);
-
-        $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) {
-            $request = new Request($swooleRequest);
-            $response = new Response($swooleResponse);
-
-            $app = new App('UTC');
-
-            try {
-                $app->run($request, $response);
-            } catch (\Throwable $th) {
-                $code = 500;
-
-                /**
-                 * @var Logger $logger
-                 */
-                $logger = $app->getResource('logger');
-                logError($th, "serverError", $logger);
-                $swooleResponse->setStatusCode($code);
-                $output = [
-                    'message' => 'Error: ' . $th->getMessage(),
-                    'code' => $code,
-                    'file' => $th->getFile(),
-                    'line' => $th->getLine(),
-                    'trace' => $th->getTrace()
-                ];
-                $swooleResponse->end(\json_encode($output));
-            }
-        });
-
-        Console::success('Functions proxy is ready.');
-
-        $server->start();
+        return;
     }
-);
+
+    // Initial health check + start timer
+    healthCheck($register, true);
+
+    $defaultInterval = '10000'; // 10 seconds
+    Timer::tick(\intval(App::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck($register, false));
+
+    $server = new Server('0.0.0.0', 80, false);
+
+    $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) {
+        $request = new Request($swooleRequest);
+        $response = new Response($swooleResponse);
+
+        $app = new App('UTC');
+
+        try {
+            $app->run($request, $response);
+        } catch (\Throwable $th) {
+            $code = 500;
+
+            /**
+             * @var Logger $logger
+             */
+            $logger = $app->getResource('logger');
+            logError($th, "serverError", $logger);
+            $swooleResponse->setStatusCode($code);
+            $output = [
+                'message' => 'Error: ' . $th->getMessage(),
+                'code' => $code,
+                'file' => $th->getFile(),
+                'line' => $th->getLine(),
+                'trace' => $th->getTrace()
+            ];
+            $swooleResponse->end(\json_encode($output));
+        }
+    });
+
+    Console::success('Functions proxy is ready.');
+
+    $server->start();
+});
