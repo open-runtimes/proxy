@@ -85,7 +85,7 @@ App::setResource('logger', fn () => $register->get('logger'));
 App::setResource('algorithm', fn () => $register->get('algorithm'));
 
 // Balancer must NOT be registry. This has to run on every request
-App::setResource('balancerGroup', function (Table $state, Algorithm $algorithm, Request $request) {
+App::setResource('balancer', function (Table $state, Algorithm $algorithm, Request $request) {
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
 
     $group = new Group();
@@ -131,12 +131,12 @@ App::setResource('balancerGroup', function (Table $state, Algorithm $algorithm, 
     $balancer2 = new Balancer($algorithm);
     $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
-    foreach ($state as $state) {
+    foreach ($state as $stateItem) {
         /**
-         * @var array<string,mixed> $state
+         * @var array<string,mixed> $stateItem
          */
-        $balancer1->addOption(new Option($state));
-        $balancer2->addOption(new Option($state));
+        $balancer1->addOption(new Option($stateItem));
+        $balancer2->addOption(new Option($stateItem));
     }
 
     $group
@@ -170,8 +170,8 @@ function healthCheck(Registry $register, bool $forceShowError = false): void
         $hostname = $node->getHostname();
 
         $oldState = $state->exists($hostname) ? $state->get($hostname) : null;
-        $oldStatus = $oldState !== null ? ((array) $oldState)['status'] : null;
-        if ($forceShowError === true || ($oldStatus !== null && $oldStatus !== $status)) {
+        $oldStatus = isset($oldState) ? ((array) $oldState)['status'] : null;
+        if ($forceShowError === true || (isset($oldStatus) && $oldStatus !== $status)) {
             Console::success('Executor "' . $node->getHostname() . '" went ' . $status . '.');
         }
 
@@ -230,17 +230,43 @@ App::init()
     });
 
 App::wildcard()
-    ->inject('balancerGroup')
+    ->inject('balancer')
+    ->inject('state')
     ->inject('request')
     ->inject('response')
-    ->action(function (Group $balancer, Request $request, Response $response) {
+    ->action(function (Group $balancer, Table $state, Request $request, Response $response) {
         $option = $balancer->run();
 
-        if ($option === null) {
+        if (!isset($option)) {
             throw new Exception('No online executor found', 404);
         }
 
+        /**
+         * @var string $hostname
+         */
         $hostname = $option->getState('hostname') ?? '';
+
+        // Optimistic update. Mark runtime up instantly to prevent race conditions
+        // Next health check with confirm it started well, and update usage stats
+        $runtimeId = $request->getHeader('x-opr-runtime-id', '');
+        if (!empty($runtimeId)) {
+            /**
+             * @var array<string,mixed> $stateItem
+             */
+            $stateItem = \json_decode($state->get($hostname)['state'] ?? '{}', true);
+
+            if (!isset($stateItem['runtimes'])) {
+                $stateItem['runtimes'] = [];
+            }
+
+            if (!isset($stateItem['runtimes'][$runtimeId])) {
+                $stateItem['runtimes'][$runtimeId] = [];
+            }
+
+            $stateItem['runtimes'][$runtimeId]['status'] = 'pass';
+            $state->set($hostname, $stateItem);
+        }
+
 
         $client = new Client($hostname, 80);
         $client->setMethod($request->getMethod());

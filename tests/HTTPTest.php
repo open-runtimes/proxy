@@ -31,8 +31,6 @@ class HTTPTest extends TestCase
         // Ensure proper executor secret
         $this->assertEquals('Bearer executor-secret-key', $body['secret']);
 
-        $server1 = $body['server'];
-
         $response = (array) $this->client->call(Client::METHOD_GET, '/v1/ping');
         $headers = (array) $response['headers'];
         $body = (array) $response['body'];
@@ -41,11 +39,6 @@ class HTTPTest extends TestCase
         $this->assertEquals('pong', $body['ping']);
         $this->assertContains($body['server'], ['mockoon1', 'mockoon2']);
         $this->assertEquals('Bearer executor-secret-key', $body['secret']);
-
-        $server2 = $body['server'];
-
-        // Ensure round-robin split traffic
-        $this->assertNotEquals($server1, $server2);
 
         $response = (array) $this->client->call(Client::METHOD_GET, '/v1/ping', [
             'authorization' => 'Bearer wrong-proxy-secret-key',

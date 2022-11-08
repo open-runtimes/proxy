@@ -65,7 +65,7 @@ services:
 4. Create `.env` file:
 
 ```
-OPR_PROXY_ALGORITHM=round-robin
+OPR_PROXY_ALGORITHM=random
 OPR_PROXY_EXECUTORS=whoami1,whoami2
 OPR_PROXY_HEALTHCHECK=disabled
 OPR_PROXY_SECRET=proxy-secret-key
