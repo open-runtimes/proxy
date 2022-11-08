@@ -170,8 +170,8 @@ function healthCheck(Registry $register, bool $forceShowError = false): void
         $hostname = $node->getHostname();
 
         $oldState = $state->exists($hostname) ? $state->get($hostname) : null;
-        $oldStatus = $oldState !== null ? ((array) $oldState)['status'] : null;
-        if ($forceShowError === true || ($oldStatus !== null && $oldStatus !== $status)) {
+        $oldStatus = isset($oldState) ? ((array) $oldState)['status'] : null;
+        if ($forceShowError === true || (isset($oldStatus) && $oldStatus !== $status)) {
             Console::success('Executor "' . $node->getHostname() . '" went ' . $status . '.');
         }
 
@@ -237,7 +237,7 @@ App::wildcard()
     ->action(function (Group $balancer, Table $state, Request $request, Response $response) {
         $option = $balancer->run();
 
-        if ($option === null) {
+        if (!isset($option)) {
             throw new Exception('No online executor found', 404);
         }
 
@@ -255,11 +255,11 @@ App::wildcard()
              */
             $stateItem = \json_decode($state->get($hostname)['state'] ?? '{}', true);
 
-            if ($stateItem['runtimes'] === null) {
+            if (!isset($stateItem['runtimes'])) {
                 $stateItem['runtimes'] = [];
             }
 
-            if ($stateItem['runtimes'][$runtimeId] === null) {
+            if (!isset($stateItem['runtimes'][$runtimeId])) {
                 $stateItem['runtimes'][$runtimeId] = [];
             }
 
