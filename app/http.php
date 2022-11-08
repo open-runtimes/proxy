@@ -19,6 +19,8 @@ use Utopia\Logger\Adapter\LogOwl;
 use Utopia\Logger\Adapter\Raygun;
 use Utopia\Logger\Adapter\Sentry;
 use Utopia\Balancer\Algorithm;
+use Utopia\Balancer\Algorithm\First;
+use Utopia\Balancer\Algorithm\Last;
 use Utopia\Balancer\Algorithm\Random;
 use Utopia\Balancer\Algorithm\RoundRobin;
 use Utopia\Balancer\Balancer;
@@ -72,6 +74,8 @@ $register->set('algorithm', function () {
     $algoType = App::getEnv('OPR_PROXY_ALGORITHM', '');
     $algo = match ($algoType) {
         'round-robin' => new RoundRobin(0),
+        'first' => new First(),
+        'last' => new Last(),
         'random' => new Random(),
         default => new Random()
     };
