@@ -132,6 +132,10 @@ App::setResource('balancer', function (Table $state, Algorithm $algorithm, Reque
     $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
     foreach ($state as $stateItem) {
+        if (App::isDevelopment()) {
+            Console::log("Adding balancing option: " . \json_encode($stateItem));
+        }
+
         /**
          * @var array<string,mixed> $stateItem
          */
@@ -245,6 +249,10 @@ App::wildcard()
          * @var string $hostname
          */
         $hostname = $option->getState('hostname') ?? '';
+
+        if (App::isDevelopment()) {
+            Console::info("Executing on " . $hostname);
+        }
 
         // Optimistic update. Mark runtime up instantly to prevent race conditions
         // Next health check with confirm it started well, and update usage stats
