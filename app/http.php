@@ -176,7 +176,11 @@ function healthCheck(Registry $register, bool $forceShowError = false): void
         $oldState = $state->exists($hostname) ? $state->get($hostname) : null;
         $oldStatus = isset($oldState) ? ((array) $oldState)['status'] : null;
         if ($forceShowError === true || (isset($oldStatus) && $oldStatus !== $status)) {
-            Console::success('Executor "' . $node->getHostname() . '" went ' . $status . '.');
+            if ($status === 'online') {
+                Console::success('Executor "' . $node->getHostname() . '" went online.');
+            } else {
+                Console::error('Executor "' . $node->getHostname() . '" went offline.');
+            }
         }
 
         $state->set($node->getHostname(), [
