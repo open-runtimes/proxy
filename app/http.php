@@ -85,7 +85,7 @@ App::setResource('logger', fn () => $register->get('logger'));
 App::setResource('algorithm', fn () => $register->get('algorithm'));
 
 // Balancer must NOT be registry. This has to run on every request
-App::setResource('balancerGroup', function (Table $state, Algorithm $algorithm, Request $request) {
+App::setResource('balancer', function (Table $state, Algorithm $algorithm, Request $request) {
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
 
     $group = new Group();
@@ -230,7 +230,7 @@ App::init()
     });
 
 App::wildcard()
-    ->inject('balancerGroup')
+    ->inject('balancer')
     ->inject('state')
     ->inject('request')
     ->inject('response')
