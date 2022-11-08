@@ -102,7 +102,7 @@ App::setResource('balancer', function (Table $state, Algorithm $algorithm, Reque
          * @var array<string,mixed> $state
          */
         $state = \json_decode($option->getState('state', '{}'), true);
-        return ($state['usage'] ?? 0) < 80;
+        return ($state['usage'] ?? 100) < 80;
     });
 
     // Only low runtime-cpu usage
@@ -123,7 +123,7 @@ App::setResource('balancer', function (Table $state, Algorithm $algorithm, Reque
              */
             $runtime = $runtimes[$runtimeId] ?? [];
 
-            return ($runtime['usage'] ?? 0) < 80;
+            return ($runtime['usage'] ?? 100) < 80;
         });
     }
 
@@ -250,10 +250,9 @@ App::wildcard()
         // Next health check with confirm it started well, and update usage stats
         $runtimeId = $request->getHeader('x-opr-runtime-id', '');
         if (!empty($runtimeId)) {
-            /**
-             * @var array<string,mixed> $stateItem
-             */
-            $stateItem = \json_decode($state->get($hostname)['state'] ?? '{}', true);
+            $record = $state->get($hostname);
+
+            $stateItem = \json_decode($record['state'] ?? '{}', true);
 
             if (!isset($stateItem['runtimes'])) {
                 $stateItem['runtimes'] = [];
@@ -264,7 +263,10 @@ App::wildcard()
             }
 
             $stateItem['runtimes'][$runtimeId]['status'] = 'pass';
-            $state->set($hostname, $stateItem);
+
+            $record['state'] = \json_encode($stateItem);
+
+            $state->set($hostname, $record);
         }
 
 
