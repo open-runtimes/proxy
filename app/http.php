@@ -19,6 +19,8 @@ use Utopia\Logger\Adapter\LogOwl;
 use Utopia\Logger\Adapter\Raygun;
 use Utopia\Logger\Adapter\Sentry;
 use Utopia\Balancer\Algorithm;
+use Utopia\Balancer\Algorithm\First;
+use Utopia\Balancer\Algorithm\Last;
 use Utopia\Balancer\Algorithm\Random;
 use Utopia\Balancer\Algorithm\RoundRobin;
 use Utopia\Balancer\Balancer;
@@ -72,6 +74,8 @@ $register->set('algorithm', function () {
     $algoType = App::getEnv('OPR_PROXY_ALGORITHM', '');
     $algo = match ($algoType) {
         'round-robin' => new RoundRobin(0),
+        'first' => new First(),
+        'last' => new Last(),
         'random' => new Random(),
         default => new Random()
     };
@@ -102,7 +106,7 @@ App::setResource('balancer', function (Table $state, Algorithm $algorithm, Reque
          * @var array<string,mixed> $state
          */
         $state = \json_decode($option->getState('state', '{}'), true);
-        return ($state['usage'] ?? 0) < 80;
+        return ($state['usage'] ?? 100) < 80;
     });
 
     // Only low runtime-cpu usage
@@ -123,7 +127,7 @@ App::setResource('balancer', function (Table $state, Algorithm $algorithm, Reque
              */
             $runtime = $runtimes[$runtimeId] ?? [];
 
-            return ($runtime['usage'] ?? 0) < 80;
+            return ($runtime['usage'] ?? 100) < 80;
         });
     }
 
@@ -132,6 +136,10 @@ App::setResource('balancer', function (Table $state, Algorithm $algorithm, Reque
     $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
     foreach ($state as $stateItem) {
+        if (App::isDevelopment()) {
+            Console::log("Adding balancing option: " . \json_encode($stateItem));
+        }
+
         /**
          * @var array<string,mixed> $stateItem
          */
@@ -172,7 +180,11 @@ function healthCheck(Registry $register, bool $forceShowError = false): void
         $oldState = $state->exists($hostname) ? $state->get($hostname) : null;
         $oldStatus = isset($oldState) ? ((array) $oldState)['status'] : null;
         if ($forceShowError === true || (isset($oldStatus) && $oldStatus !== $status)) {
-            Console::success('Executor "' . $node->getHostname() . '" went ' . $status . '.');
+            if ($status === 'online') {
+                Console::success('Executor "' . $node->getHostname() . '" went online.');
+            } else {
+                Console::error('Executor "' . $node->getHostname() . '" went offline.');
+            }
         }
 
         $state->set($node->getHostname(), [
@@ -246,14 +258,17 @@ App::wildcard()
          */
         $hostname = $option->getState('hostname') ?? '';
 
+        if (App::isDevelopment()) {
+            Console::info("Executing on " . $hostname);
+        }
+
         // Optimistic update. Mark runtime up instantly to prevent race conditions
         // Next health check with confirm it started well, and update usage stats
         $runtimeId = $request->getHeader('x-opr-runtime-id', '');
         if (!empty($runtimeId)) {
-            /**
-             * @var array<string,mixed> $stateItem
-             */
-            $stateItem = \json_decode($state->get($hostname)['state'] ?? '{}', true);
+            $record = $state->get($hostname);
+
+            $stateItem = \json_decode($record['state'] ?? '{}', true);
 
             if (!isset($stateItem['runtimes'])) {
                 $stateItem['runtimes'] = [];
@@ -264,7 +279,10 @@ App::wildcard()
             }
 
             $stateItem['runtimes'][$runtimeId]['status'] = 'pass';
-            $state->set($hostname, $stateItem);
+
+            $record['state'] = \json_encode($stateItem);
+
+            $state->set($hostname, $record);
         }
 
 
