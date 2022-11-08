@@ -8,16 +8,16 @@
     "packages": [
         {
             "name": "utopia-php/balancer",
-            "version": "0.3.1",
+            "version": "0.3.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/balancer.git",
-                "reference": "1137448dc3b5df4c7f288c12444d58bf8e866b64"
+                "reference": "8b14583a4d7d06ca8c3bd9aad6ba46b01d2f4b2e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/balancer/zipball/1137448dc3b5df4c7f288c12444d58bf8e866b64",
-                "reference": "1137448dc3b5df4c7f288c12444d58bf8e866b64",
+                "url": "https://api.github.com/repos/utopia-php/balancer/zipball/8b14583a4d7d06ca8c3bd9aad6ba46b01d2f4b2e",
+                "reference": "8b14583a4d7d06ca8c3bd9aad6ba46b01d2f4b2e",
                 "shasum": ""
             },
             "require": {
@@ -49,9 +49,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/balancer/issues",
-                "source": "https://github.com/utopia-php/balancer/tree/0.3.1"
+                "source": "https://github.com/utopia-php/balancer/tree/0.3.2"
             },
-            "time": "2022-11-08T15:22:02+00:00"
+            "time": "2022-11-08T16:48:37+00:00"
         },
         {
             "name": "utopia-php/cli",
