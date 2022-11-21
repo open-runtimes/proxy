@@ -279,6 +279,7 @@ App::wildcard()
             }
 
             $stateItem['runtimes'][$runtimeId]['status'] = 'pass';
+            $stateItem['runtimes'][$runtimeId]['usage'] = 0;
 
             $record['state'] = \json_encode($stateItem);
 
