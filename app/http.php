@@ -376,8 +376,6 @@ run(function () use ($register) {
                 'state' =>  \json_encode([])
             ]);
         }
-
-        return;
     }
 
     // Initial health check + start timer
