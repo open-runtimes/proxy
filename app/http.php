@@ -4,7 +4,6 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
-use Swoole\Coroutine\Http\Client;
 use Swoole\Coroutine\Http\Server;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
@@ -197,6 +196,11 @@ function healthCheck(Registry $register, bool $forceShowError = false): void
 
 function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Route $route = null): void
 {
+    Console::error('[Error] Type: ' . get_class($error));
+    Console::error('[Error] Message: ' . $error->getMessage());
+    Console::error('[Error] File: ' . $error->getFile());
+    Console::error('[Error] Line: ' . $error->getLine());
+
     if ($logger) {
         $version = (string) App::getEnv('OPR_PROXY_VERSION', 'UNKNOWN');
 
@@ -217,18 +221,14 @@ function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Rout
         $log->addExtra('file', $error->getFile());
         $log->addExtra('line', $error->getLine());
         $log->addExtra('trace', $error->getTraceAsString());
-        $log->addExtra('detailedTrace', $error->getTrace());
+        // TODO: @Meldiron Uncomment, was warning: Undefined array key "file" in Sentry.php on line 68
+        // $log->addExtra('detailedTrace', $error->getTrace());
         $log->setAction($action);
         $log->setEnvironment(App::isProduction() ? Log::ENVIRONMENT_PRODUCTION : Log::ENVIRONMENT_STAGING);
 
         $responseCode = $logger->addLog($log);
         Console::info('Proxy log pushed with status code: ' . $responseCode);
     }
-
-    Console::error('[Error] Type: ' . get_class($error));
-    Console::error('[Error] Message: ' . $error->getMessage());
-    Console::error('[Error] File: ' . $error->getFile());
-    Console::error('[Error] Line: ' . $error->getLine());
 }
 
 App::init()
@@ -286,10 +286,6 @@ App::wildcard()
             $state->set($hostname, $record);
         }
 
-
-        $client = new Client($hostname, 80);
-        $client->setMethod($request->getMethod());
-
         $headers = \array_merge($request->getHeaders(), [
             'authorization' => 'Bearer ' . App::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
         ]);
@@ -301,17 +297,58 @@ App::wildcard()
             ]);
         }
 
-        $client->setHeaders($headers);
-        $client->setData($request->getRawPayload());
-        $client->execute($request->getURI());
+        $body = $request->getRawPayload();
 
-        foreach ($client->headers as $header => $value) {
-            $response->addHeader($header, $value);
+        $ch = \curl_init();
+
+        \curl_setopt($ch, CURLOPT_URL, $hostname . $request->getURI());
+        \curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
+        \curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        \curl_setopt($ch, CURLOPT_HEADER, true);
+        \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+
+        $curlHeaders = [];
+        foreach ($headers as $header => $value) {
+            $curlHeaders[] = "{$header}: {$value}";
+        }
+
+        \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
+
+        $executorResponse = \curl_exec($ch);
+
+        $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        $error = \curl_error($ch);
+
+        $errNo = \curl_errno($ch);
+
+        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $headers = substr(\strval($executorResponse), 0, $header_size);
+        $body = substr(\strval($executorResponse), $header_size);
+
+        \curl_close($ch);
+
+        if ($errNo !== 0) {
+            throw new Exception('Unexpected curl error between proxy and executor: ' . $error);
+        }
+
+        if (!empty($headers)) {
+            $headers = preg_split("/\r\n|\n|\r/", $headers);
+            if ($headers) {
+                foreach ($headers as $header) {
+                    if (\str_contains($header, ':')) {
+                        [ $key, $value ] = \explode(':', $header, 2);
+
+                        $response->addHeader($key, $value);
+                    }
+                }
+            }
         }
 
         $response
-            ->setStatusCode(\intval($client->getStatusCode()))
-            ->send(\strval($client->getBody()));
+            ->setStatusCode($statusCode)
+            ->send($body);
     });
 
 App::error()
@@ -411,6 +448,7 @@ run(function () use ($register) {
                 'line' => $th->getLine(),
                 'trace' => $th->getTrace()
             ];
+
             $swooleResponse->end(\json_encode($output));
         }
     });
