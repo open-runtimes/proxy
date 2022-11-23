@@ -197,6 +197,11 @@ function healthCheck(Registry $register, bool $forceShowError = false): void
 
 function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Route $route = null): void
 {
+    Console::error('[Error] Type: ' . get_class($error));
+    Console::error('[Error] Message: ' . $error->getMessage());
+    Console::error('[Error] File: ' . $error->getFile());
+    Console::error('[Error] Line: ' . $error->getLine());
+
     if ($logger) {
         $version = (string) App::getEnv('OPR_PROXY_VERSION', 'UNKNOWN');
 
@@ -217,18 +222,14 @@ function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Rout
         $log->addExtra('file', $error->getFile());
         $log->addExtra('line', $error->getLine());
         $log->addExtra('trace', $error->getTraceAsString());
-        $log->addExtra('detailedTrace', $error->getTrace());
+        // TODO: @Meldiron Uncomment, was warning: Undefined array key "file" in Sentry.php on line 68
+        // $log->addExtra('detailedTrace', $error->getTrace());
         $log->setAction($action);
         $log->setEnvironment(App::isProduction() ? Log::ENVIRONMENT_PRODUCTION : Log::ENVIRONMENT_STAGING);
 
         $responseCode = $logger->addLog($log);
         Console::info('Proxy log pushed with status code: ' . $responseCode);
     }
-
-    Console::error('[Error] Type: ' . get_class($error));
-    Console::error('[Error] Message: ' . $error->getMessage());
-    Console::error('[Error] File: ' . $error->getFile());
-    Console::error('[Error] Line: ' . $error->getLine());
 }
 
 App::init()
