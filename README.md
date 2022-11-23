@@ -44,6 +44,7 @@ services:
       - 9800:80
     environment:
       - OPR_PROXY_ALGORITHM
+      - OPR_PROXY_WORKER_PER_CORE
       - OPR_PROXY_EXECUTORS
       - OPR_PROXY_HEALTHCHECK_INTERVAL
       - OPR_PROXY_ENV
@@ -66,6 +67,7 @@ services:
 
 ```
 OPR_PROXY_ALGORITHM=random
+OPR_PROXY_WORKER_PER_CORE=6
 OPR_PROXY_EXECUTORS=whoami1,whoami2
 OPR_PROXY_HEALTHCHECK=disabled
 OPR_PROXY_SECRET=proxy-secret-key
@@ -105,6 +107,7 @@ docker compose down
 | Variable name                            | Description                                                                                                                     |
 |------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
 | OPR_PROXY_ALGORITHM            | Proxying algorithm. Supports `round-robin`, `random`, `first`, `last`.                                                                    |
+| OPR_PROXY_WORKER_PER_CORE      | How many concurrent requests can proxy handle per each CPU core.                                                                          |
 | OPR_PROXY_EXECUTORS            | Comma-separated hostnames of servers under the proxy.                                                                                     |
 | OPR_PROXY_HEALTHCHECK          | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
 | OPR_PROXY_HEALTHCHECK_INTERVAL | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPR_PROXY_HEALTHCHECK is 'enabled'.                       |

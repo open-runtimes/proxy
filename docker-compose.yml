@@ -28,6 +28,7 @@ services:
       - ./tests:/usr/local/tests:rw
     environment:
       - OPR_PROXY_ALGORITHM
+      - OPR_PROXY_WORKER_PER_CORE
       - OPR_PROXY_EXECUTORS
       - OPR_PROXY_HEALTHCHECK_INTERVAL
       - OPR_PROXY_ENV
