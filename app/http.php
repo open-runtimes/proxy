@@ -4,7 +4,6 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
-use Swoole\Coroutine\Http\Client;
 use Swoole\Coroutine\Http\Server;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
@@ -248,6 +247,7 @@ App::wildcard()
     ->inject('request')
     ->inject('response')
     ->action(function (Group $balancer, Table $state, Request $request, Response $response) {
+        \var_dump("Action start");
         $option = $balancer->run();
 
         if (!isset($option)) {
@@ -287,10 +287,6 @@ App::wildcard()
             $state->set($hostname, $record);
         }
 
-
-        $client = new Client($hostname, 80);
-        $client->setMethod($request->getMethod());
-
         $headers = \array_merge($request->getHeaders(), [
             'authorization' => 'Bearer ' . App::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
         ]);
@@ -302,17 +298,70 @@ App::wildcard()
             ]);
         }
 
-        $client->setHeaders($headers);
-        $client->setData($request->getRawPayload());
-        $client->execute($request->getURI());
+        $body = $request->getRawPayload();
 
-        foreach ($client->headers as $header => $value) {
-            $response->addHeader($header, $value);
+        $ch = \curl_init();
+
+        \curl_setopt($ch, CURLOPT_URL, $hostname . $request->getURI());
+        \curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
+        \curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        \curl_setopt($ch, CURLOPT_HEADER, true);
+        \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+
+        $curlHeaders = [];
+        foreach ($headers as $header => $value) {
+            $curlHeaders[] = "{$header}: {$value}";
+        }
+
+        \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
+
+        \var_dump("Action exc start");
+
+        $executorResponse = \curl_exec($ch);
+
+        $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        $error = \curl_error($ch);
+
+        $errNo = \curl_errno($ch);
+
+        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $headers = substr(\strval($executorResponse), 0, $header_size);
+        $body = substr(\strval($executorResponse), $header_size);
+
+        \curl_close($ch);
+
+        \var_dump("Action exc end");
+
+        \var_dump($header);
+        \var_dump($body);
+        \var_dump($statusCode);
+        \var_dump($error);
+        \var_dump($errNo);
+
+        if ($errNo !== 0) {
+            throw new Exception('Unexpected curl error between proxy and executor: ' . $error);
+        }
+
+        if (!empty($headers)) {
+            $headers = preg_split("/\r\n|\n|\r/", $headers);
+            if ($headers) {
+                foreach ($headers as $header) {
+                    if (\str_contains($header, ':')) {
+                        [ $key, $value ] = \explode(':', $header, 2);
+
+                        $response->addHeader($key, $value);
+                    }
+                }
+            }
         }
 
         $response
-            ->setStatusCode(\intval($client->getStatusCode()))
-            ->send(\strval($client->getBody()));
+            ->setStatusCode($statusCode)
+            ->send($body);
+
+        \var_dump("Action end 2");
     });
 
 App::error()
@@ -322,8 +371,12 @@ App::error()
     ->inject('request')
     ->inject('response')
     ->action(function (App $utopia, throwable $error, ?Logger $logger, Request $request, Response $response) {
+        \var_dump("Action error 0");
+        \var_dump($error);
+        \var_dump("Action error 1");
         $route = $utopia->match($request);
         logError($error, "httpError", $logger, $route);
+        \var_dump("Action error 2");
 
         switch ($error->getCode()) {
             case 400: // Error allowed publicly
@@ -352,6 +405,7 @@ App::error()
             'trace' => $error->getTrace(),
             'version' => App::getEnv('OPR_PROXY_VERSION', 'UNKNOWN')
         ];
+        \var_dump("Action error 3");
 
         $response
             ->addHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
@@ -360,6 +414,7 @@ App::error()
             ->setStatusCode(\intval($code));
 
         $response->json($output);
+        \var_dump("Action error 4");
     });
 
 run(function () use ($register) {
@@ -389,14 +444,22 @@ run(function () use ($register) {
     $server = new Server('0.0.0.0', 80, false);
 
     $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) {
+        \var_dump("Hadnle start");
         $request = new Request($swooleRequest);
         $response = new Response($swooleResponse);
+        \var_dump("Hadnle start 2");
 
         $app = new App('UTC');
+        \var_dump("Hadnle start 3");
 
         try {
             $app->run($request, $response);
+            \var_dump("Hadnle end");
         } catch (\Throwable $th) {
+            \var_dump("Handle error 1");
+            \var_dump($th);
+            \var_dump("Handle error 2");
+
             $code = 500;
 
             /**
@@ -412,7 +475,10 @@ run(function () use ($register) {
                 'line' => $th->getLine(),
                 'trace' => $th->getTrace()
             ];
+
+            \var_dump("Handle error 3");
             $swooleResponse->end(\json_encode($output));
+            \var_dump("Handle error 4");
         }
     });
 
