@@ -345,7 +345,7 @@ App::wildcard()
                 }
             }
         }
-        
+
         $response
             ->setStatusCode($statusCode)
             ->send($body);
