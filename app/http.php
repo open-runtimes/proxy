@@ -149,7 +149,7 @@ App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
     return $group;
 }, ['algorithm', 'request']);
 
-function healthCheck(Registry $register, bool $forceShowError = false): void
+function healthCheck(bool $forceShowError = false): void
 {
     /**
      * @var Table $state
@@ -413,10 +413,10 @@ if (App::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
 }
 
 // TODO: @Meldiron Switch to coroutine-style when utopia is ready
-$http = new Server("0.0.0.0", App::getEnv('PORT', 80));
+$http = new Server("0.0.0.0", \intval(App::getEnv('PORT', '80')));
 
 $payloadSize = 6 * (1024 * 1024); // 6MB
-$workerNumber = swoole_cpu_num() * intval(App::getEnv('_APP_WORKER_PER_CORE', 6));
+$workerNumber = swoole_cpu_num() * \intval(App::getEnv('_APP_WORKER_PER_CORE', '6'));
 $http
     ->set([
         'worker_num' => $workerNumber,
@@ -441,17 +441,17 @@ $http->on('AfterReload', function ($server, $workerId) {
     Console::success('Reload completed...');
 });
 
-$http->on('start', function (Server $http) use ($register) {
+$http->on('start', function (Server $http) {
     // Initial health check + start timer
-    healthCheck($register, true);
+    healthCheck(true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(App::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck($register, false));
+    Timer::tick(\intval(App::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck(false));
 
     Console::success('Functions proxy is ready.');
 });
 
-$http->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($register) {
+$http->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) {
     $request = new Request($swooleRequest);
     $response = new Response($swooleResponse);
 
