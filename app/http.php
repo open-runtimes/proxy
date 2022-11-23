@@ -247,7 +247,6 @@ App::wildcard()
     ->inject('request')
     ->inject('response')
     ->action(function (Group $balancer, Table $state, Request $request, Response $response) {
-        \var_dump("Action start");
         $option = $balancer->run();
 
         if (!isset($option)) {
@@ -316,8 +315,6 @@ App::wildcard()
 
         \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
 
-        \var_dump("Action exc start");
-
         $executorResponse = \curl_exec($ch);
 
         $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -331,14 +328,6 @@ App::wildcard()
         $body = substr(\strval($executorResponse), $header_size);
 
         \curl_close($ch);
-
-        \var_dump("Action exc end");
-
-        \var_dump($header);
-        \var_dump($body);
-        \var_dump($statusCode);
-        \var_dump($error);
-        \var_dump($errNo);
 
         if ($errNo !== 0) {
             throw new Exception('Unexpected curl error between proxy and executor: ' . $error);
@@ -356,12 +345,10 @@ App::wildcard()
                 }
             }
         }
-
+        
         $response
             ->setStatusCode($statusCode)
             ->send($body);
-
-        \var_dump("Action end 2");
     });
 
 App::error()
@@ -371,12 +358,8 @@ App::error()
     ->inject('request')
     ->inject('response')
     ->action(function (App $utopia, throwable $error, ?Logger $logger, Request $request, Response $response) {
-        \var_dump("Action error 0");
-        \var_dump($error);
-        \var_dump("Action error 1");
         $route = $utopia->match($request);
         logError($error, "httpError", $logger, $route);
-        \var_dump("Action error 2");
 
         switch ($error->getCode()) {
             case 400: // Error allowed publicly
@@ -405,7 +388,6 @@ App::error()
             'trace' => $error->getTrace(),
             'version' => App::getEnv('OPR_PROXY_VERSION', 'UNKNOWN')
         ];
-        \var_dump("Action error 3");
 
         $response
             ->addHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
@@ -414,7 +396,6 @@ App::error()
             ->setStatusCode(\intval($code));
 
         $response->json($output);
-        \var_dump("Action error 4");
     });
 
 run(function () use ($register) {
@@ -444,22 +425,14 @@ run(function () use ($register) {
     $server = new Server('0.0.0.0', 80, false);
 
     $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) {
-        \var_dump("Hadnle start");
         $request = new Request($swooleRequest);
         $response = new Response($swooleResponse);
-        \var_dump("Hadnle start 2");
 
         $app = new App('UTC');
-        \var_dump("Hadnle start 3");
 
         try {
             $app->run($request, $response);
-            \var_dump("Hadnle end");
         } catch (\Throwable $th) {
-            \var_dump("Handle error 1");
-            \var_dump($th);
-            \var_dump("Handle error 2");
-
             $code = 500;
 
             /**
@@ -476,9 +449,7 @@ run(function () use ($register) {
                 'trace' => $th->getTrace()
             ];
 
-            \var_dump("Handle error 3");
             $swooleResponse->end(\json_encode($output));
-            \var_dump("Handle error 4");
         }
     });
 
