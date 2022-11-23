@@ -4,7 +4,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
-use Swoole\Coroutine\Http\Server;
+use Swoole\Http\Server;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
 use Swoole\Runtime;
@@ -30,8 +30,6 @@ use Utopia\Registry\Registry;
 use Utopia\Swoole\Request;
 use Utopia\Swoole\Response;
 
-use function Swoole\Coroutine\run;
-
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
 App::setMode((string) App::getEnv('OPR_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
@@ -39,15 +37,13 @@ App::setMode((string) App::getEnv('OPR_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
 // Setup Registry
 $register = new Registry();
 
-$register->set('state', function () {
-    $count = \count(\explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', '')));
-    $state = new Table($count);
-    $state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
-    $state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
-    $state->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
-    $state->create();
-    return $state;
-});
+// TODO: @Meldiron put this into registry
+$count = \count(\explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', '')));
+$state = new Table($count);
+$state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
+$state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
+$state->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
+$state->create();
 
 $register->set('logger', function () {
     $providerName = App::getEnv('OPR_PROXY_LOGGING_PROVIDER', '');
@@ -83,12 +79,12 @@ $register->set('algorithm', function () {
 });
 
 // Setup Resources
-App::setResource('state', fn () => $register->get('state'));
 App::setResource('logger', fn () => $register->get('logger'));
 App::setResource('algorithm', fn () => $register->get('algorithm'));
 
 // Balancer must NOT be registry. This has to run on every request
-App::setResource('balancer', function (Table $state, Algorithm $algorithm, Request $request) {
+App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
+    global $state;
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
 
     $group = new Group();
@@ -151,14 +147,14 @@ App::setResource('balancer', function (Table $state, Algorithm $algorithm, Reque
         ->add($balancer2);
 
     return $group;
-}, ['state', 'algorithm', 'request']);
+}, ['algorithm', 'request']);
 
-function healthCheck(Registry $register, bool $forceShowError = false): void
+function healthCheck(bool $forceShowError = false): void
 {
     /**
      * @var Table $state
      */
-    $state = $register->get('state');
+    global $state;
 
     $executors = \explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', ''));
 
@@ -243,10 +239,10 @@ App::init()
 
 App::wildcard()
     ->inject('balancer')
-    ->inject('state')
     ->inject('request')
     ->inject('response')
-    ->action(function (Group $balancer, Table $state, Request $request, Response $response) {
+    ->action(function (Group $balancer, Request $request, Response $response) {
+        global $state;
         $option = $balancer->run();
 
         if (!isset($option)) {
@@ -398,62 +394,90 @@ App::error()
         $response->json($output);
     });
 
-run(function () use ($register) {
-    // If no health check, mark all as online
-    if (App::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
-        /**
-         * @var Table $state
-         */
-        $state = $register->get('state');
-        $executors = \explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', ''));
+// If no health check, mark all as online
+if (App::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
+    /**
+     * @var Table $state
+     */
+    global $state;
 
-        foreach ($executors as $executor) {
-            $state->set($executor, [
-                'status' => 'online',
-                'hostname' => $executor,
-                'state' =>  \json_encode([])
-            ]);
-        }
+    $executors = \explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', ''));
+
+    foreach ($executors as $executor) {
+        $state->set($executor, [
+            'status' => 'online',
+            'hostname' => $executor,
+            'state' =>  \json_encode([])
+        ]);
     }
+}
 
+// TODO: @Meldiron Switch to coroutine-style when utopia is ready
+$http = new Server("0.0.0.0", \intval(App::getEnv('PORT', '80')));
+
+$payloadSize = 6 * (1024 * 1024); // 6MB
+$workerNumber = swoole_cpu_num() * \intval(App::getEnv('_APP_WORKER_PER_CORE', '6'));
+$http
+    ->set([
+        'worker_num' => $workerNumber,
+        'open_http2_protocol' => true,
+        // 'document_root' => __DIR__.'/../public',
+        // 'enable_static_handler' => true,
+        'http_compression' => true,
+        'http_compression_level' => 6,
+        'package_max_length' => $payloadSize,
+        'buffer_output_size' => $payloadSize,
+    ]);
+
+$http->on('WorkerStart', function ($server, $workerId) {
+    Console::success('Worker ' . ++$workerId . ' started successfully');
+});
+
+$http->on('BeforeReload', function ($server, $workerId) {
+    Console::success('Starting reload...');
+});
+
+$http->on('AfterReload', function ($server, $workerId) {
+    Console::success('Reload completed...');
+});
+
+$http->on('start', function (Server $http) {
     // Initial health check + start timer
-    healthCheck($register, true);
+    healthCheck(true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(App::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck($register, false));
-
-    $server = new Server('0.0.0.0', 80, false);
-
-    $server->handle('/', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) {
-        $request = new Request($swooleRequest);
-        $response = new Response($swooleResponse);
-
-        $app = new App('UTC');
-
-        try {
-            $app->run($request, $response);
-        } catch (\Throwable $th) {
-            $code = 500;
-
-            /**
-             * @var Logger $logger
-             */
-            $logger = $app->getResource('logger');
-            logError($th, "serverError", $logger);
-            $swooleResponse->setStatusCode($code);
-            $output = [
-                'message' => 'Error: ' . $th->getMessage(),
-                'code' => $code,
-                'file' => $th->getFile(),
-                'line' => $th->getLine(),
-                'trace' => $th->getTrace()
-            ];
-
-            $swooleResponse->end(\json_encode($output));
-        }
-    });
+    Timer::tick(\intval(App::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck(false));
 
     Console::success('Functions proxy is ready.');
-
-    $server->start();
 });
+
+$http->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) {
+    $request = new Request($swooleRequest);
+    $response = new Response($swooleResponse);
+
+    $app = new App('UTC');
+
+    try {
+        $app->run($request, $response);
+    } catch (\Throwable $th) {
+        $code = 500;
+
+        /**
+         * @var Logger $logger
+         */
+        $logger = $app->getResource('logger');
+        logError($th, "serverError", $logger);
+        $swooleResponse->setStatusCode($code);
+        $output = [
+            'message' => 'Error: ' . $th->getMessage(),
+            'code' => $code,
+            'file' => $th->getFile(),
+            'line' => $th->getLine(),
+            'trace' => $th->getTrace()
+        ];
+
+        $swooleResponse->end(\json_encode($output));
+    }
+});
+
+$http->start();
