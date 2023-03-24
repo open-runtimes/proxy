@@ -131,11 +131,11 @@ App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
                 return ($runtime['usage'] ?? 100) < 80;
             });
         }
-    }
 
-    // Any options
-    $balancer2 = new Balancer($algorithm);
-    $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+        // Any options
+        $balancer2 = new Balancer($algorithm);
+        $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+    }
 
     foreach ($state as $stateItem) {
         if (App::isDevelopment()) {
@@ -146,12 +146,17 @@ App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
          * @var array<string,mixed> $stateItem
          */
         $balancer1->addOption(new Option($stateItem));
-        $balancer2->addOption(new Option($stateItem));
+
+        if(isset($balancer2)) {
+            $balancer2->addOption(new Option($stateItem));
+        }
     }
 
-    $group
-        ->add($balancer1)
-        ->add($balancer2);
+    $group->add($balancer1);
+
+    if(isset($balancer2)) {
+        $group->add($balancer2);
+    }
 
     return $group;
 }, ['algorithm', 'request']);
