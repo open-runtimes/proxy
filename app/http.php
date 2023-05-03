@@ -327,7 +327,7 @@ App::wildcard()
         \curl_close($ch);
 
         if ($errNo !== 0) {
-            throw new Exception('Unexpected curl error between proxy and executor (' . $errNo .  '): ' . $error);
+            throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
         }
 
         if (!empty($headers)) {
