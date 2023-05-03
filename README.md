@@ -112,7 +112,7 @@ docker compose down
 | OPR_PROXY_EXECUTORS            | Comma-separated hostnames of servers under the proxy.                                                                                     |
 | OPR_PROXY_HEALTHCHECK          | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
 | OPR_PROXY_HEALTHCHECK_INTERVAL | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPR_PROXY_HEALTHCHECK is 'enabled'.                       |
-| OPR_PROXY_HEALTHCHECK_INTERVAL | Maximum timeout in seconds for communication between proxy and executor. Default is 600 seconds.                       |
+| OPR_PROXY_MAX_TIMEOUT | Maximum timeout in seconds for communication between proxy and executor. Default is 600 seconds.                       |
 | OPR_PROXY_ENV                  | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
 | OPR_PROXY_SECRET               | Secret that needs to be provided in `Authroization` header when communicating with the to proxy.                                          |
 | OPR_PROXY_EXECUTOR_SECRET      | String provided as `authorization` header by proxy when sending request to executor.                                                      |
