@@ -311,6 +311,7 @@ App::wildcard()
             \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             \curl_setopt($ch, CURLOPT_HEADER, true);
             \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            \curl_setopt($ch, CURLOPT_TIMEOUT, \intval(App::getEnv('OPR_PROXY_MAX_TIMEOUT', '900')));
 
             $curlHeaders = [];
             foreach ($headers as $header => $value) {
@@ -334,7 +335,7 @@ App::wildcard()
             \curl_close($ch);
 
             if ($errNo !== 0) {
-                throw new Exception('Unexpected curl error between proxy and executor: ' . $error);
+                throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
             }
 
             $headersArr = [];
@@ -343,7 +344,7 @@ App::wildcard()
                 if ($headers) {
                     foreach ($headers as $header) {
                         if (\str_contains($header, ':')) {
-                            [ $key, $value ] = \explode(':', $header, 2);
+                            [$key, $value] = \explode(':', $header, 2);
                             $headersArr[$key] = $value;
                         }
                     }
