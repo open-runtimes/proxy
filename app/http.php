@@ -147,14 +147,14 @@ App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
          */
         $balancer1->addOption(new Option($stateItem));
 
-        if(isset($balancer2)) {
+        if (isset($balancer2)) {
             $balancer2->addOption(new Option($stateItem));
         }
     }
 
     $group->add($balancer1);
 
-    if(isset($balancer2)) {
+    if (isset($balancer2)) {
         $group->add($balancer2);
     }
 
