@@ -30,6 +30,10 @@ use Utopia\Registry\Registry;
 use Utopia\Swoole\Request;
 use Utopia\Swoole\Response;
 
+const ADDRESSING_METHOD_ANYCAST_EFFICIENT = 'anycast-efficient';
+const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
+const ADDRESSING_METHOD_ANYCAST_BROADCSAT = 'broadcast';
+
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
 App::setMode((string) App::getEnv('OPR_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
@@ -86,11 +90,11 @@ App::setResource('algorithm', fn () => $register->get('algorithm'));
 App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
     global $state;
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
-    $method = $request->getHeader('x-opr-addressing-method', 'anycast-efficient');
+    $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
     $group = new Group();
 
-    if ($method === 'anycast-fast') {
+    if ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
         $algorithm = new Random();
     }
 
@@ -100,7 +104,7 @@ App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
     // Only online executors
     $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
-    if ($method === 'anycast-efficient') {
+    if ($method === ADDRESSING_METHOD_ANYCAST_EFFICIENT) {
         // Only low host-cpu usage
         $balancer1->addFilter(function ($option) {
             /**
@@ -254,7 +258,7 @@ App::wildcard()
     ->inject('request')
     ->inject('response')
     ->action(function (Group $balancer, Request $request, Response $response) {
-        $method = $request->getHeader('x-opr-addressing-method', 'anycast-efficient');
+        $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
         $proxyRequest = function (string $hostname) use ($request) {
             if (App::isDevelopment()) {
@@ -353,7 +357,7 @@ App::wildcard()
             ];
         };
 
-        if ($method === 'broadcast') {
+        if ($method === ADDRESSING_METHOD_ANYCAST_BROADCSAT) {
             foreach ($balancer->getOptions() as $option) {
                 /**
                  * @var string $hostname
