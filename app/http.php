@@ -32,7 +32,7 @@ use Utopia\Swoole\Response;
 
 const ADDRESSING_METHOD_ANYCAST_EFFICIENT = 'anycast-efficient';
 const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
-const ADDRESSING_METHOD_ANYCAST_BROADCSAT = 'broadcast';
+const ADDRESSING_METHOD_BROADCSAT = 'broadcast';
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
@@ -358,7 +358,7 @@ App::wildcard()
             ];
         };
 
-        if ($method === ADDRESSING_METHOD_ANYCAST_BROADCSAT) {
+        if ($method === ADDRESSING_METHOD_BROADCSAT) {
             foreach ($balancer->getOptions() as $option) {
                 /**
                  * @var string $hostname
