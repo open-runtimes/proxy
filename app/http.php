@@ -305,11 +305,24 @@ App::wildcard()
 
             $ch = \curl_init();
 
+            $$responseHeaders = [];
+
             \curl_setopt($ch, CURLOPT_URL, $hostname . $request->getURI());
             \curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
             \curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
             \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            \curl_setopt($ch, CURLOPT_HEADER, true);
+            \curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($curl, $header) use (&$responseHeaders) {
+                $len = strlen($header);
+                $header = explode(':', $header, 2);
+                if (count($header) < 2) { // ignore invalid headers
+                    return $len;
+                }
+
+                $key = strtolower(trim($header[0]));
+                $responseHeaders[$key] = trim($header[1]);
+
+                return $len;
+            });
             \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
             \curl_setopt($ch, CURLOPT_TIMEOUT, \intval(App::getEnv('OPR_PROXY_MAX_TIMEOUT', '900')));
 
@@ -318,43 +331,24 @@ App::wildcard()
                 $curlHeaders[] = "{$header}: {$value}";
             }
 
+            \curl_setopt($ch, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED);
             \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
 
-            $executorResponse = \curl_exec($ch);
-
+            $body = \curl_exec($ch);
             $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
             $error = \curl_error($ch);
-
             $errNo = \curl_errno($ch);
-
-            $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-            $headers = substr(\strval($executorResponse), 0, $header_size);
-            $body = substr(\strval($executorResponse), $header_size);
 
             \curl_close($ch);
 
-            if ($errNo !== 0) {
+            if ($errNo !== 0 || \is_bool($body)) {
                 throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
-            }
-
-            $headersArr = [];
-            if (!empty($headers)) {
-                $headers = preg_split("/\r\n|\n|\r/", $headers);
-                if ($headers) {
-                    foreach ($headers as $header) {
-                        if (\str_contains($header, ':')) {
-                            [$key, $value] = \explode(':', $header, 2);
-                            $headersArr[$key] = $value;
-                        }
-                    }
-                }
             }
 
             return [
                 'statusCode' => $statusCode,
                 'body' => $body,
-                'headers' => $headersArr
+                'headers' => $responseHeaders
             ];
         };
 
@@ -382,8 +376,9 @@ App::wildcard()
             $hostname = $option->getState('hostname') ?? '';
 
             $result = $proxyRequest($hostname);
+            $headers = $result['headers'] ?? [];
 
-            foreach ($result['headers'] as $key => $value) {
+            foreach ($headers as $key => $value) {
                 $response->addHeader($key, $value);
             }
 
