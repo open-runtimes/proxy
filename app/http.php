@@ -30,6 +30,10 @@ use Utopia\Registry\Registry;
 use Utopia\Swoole\Request;
 use Utopia\Swoole\Response;
 
+const ADDRESSING_METHOD_ANYCAST_EFFICIENT = 'anycast-efficient';
+const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
+const ADDRESSING_METHOD_BROADCAST = 'broadcast';
+
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
 App::setMode((string) App::getEnv('OPR_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
@@ -86,8 +90,13 @@ App::setResource('algorithm', fn () => $register->get('algorithm'));
 App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
     global $state;
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
+    $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
     $group = new Group();
+
+    if ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
+        $algorithm = new Random();
+    }
 
     // Cold-started-only options
     $balancer1 = new Balancer($algorithm);
@@ -95,40 +104,42 @@ App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
     // Only online executors
     $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
-    // Only low host-cpu usage
-    $balancer1->addFilter(function ($option) {
-        /**
-         * @var array<string,mixed> $state
-         */
-        $state = \json_decode($option->getState('state', '{}'), true);
-        return ($state['usage'] ?? 100) < 80;
-    });
-
-    // Only low runtime-cpu usage
-    if (!empty($runtimeId)) {
-        $balancer1->addFilter(function ($option) use ($runtimeId) {
+    if ($method === ADDRESSING_METHOD_ANYCAST_EFFICIENT) {
+        // Only low host-cpu usage
+        $balancer1->addFilter(function ($option) {
             /**
              * @var array<string,mixed> $state
              */
             $state = \json_decode($option->getState('state', '{}'), true);
-
-            /**
-             * @var array<string,mixed> $runtimes
-             */
-            $runtimes = $state['runtimes'];
-
-            /**
-             * @var array<string,mixed> $runtime
-             */
-            $runtime = $runtimes[$runtimeId] ?? [];
-
-            return ($runtime['usage'] ?? 100) < 80;
+            return ($state['usage'] ?? 100) < 80;
         });
-    }
 
-    // Any options
-    $balancer2 = new Balancer($algorithm);
-    $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+        // Only low runtime-cpu usage
+        if (!empty($runtimeId)) {
+            $balancer1->addFilter(function ($option) use ($runtimeId) {
+                /**
+                 * @var array<string,mixed> $state
+                 */
+                $state = \json_decode($option->getState('state', '{}'), true);
+
+                /**
+                 * @var array<string,mixed> $runtimes
+                 */
+                $runtimes = $state['runtimes'];
+
+                /**
+                 * @var array<string,mixed> $runtime
+                 */
+                $runtime = $runtimes[$runtimeId] ?? [];
+
+                return ($runtime['usage'] ?? 100) < 80;
+            });
+        }
+
+        // Any options
+        $balancer2 = new Balancer($algorithm);
+        $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+    }
 
     foreach ($state as $stateItem) {
         if (App::isDevelopment()) {
@@ -139,12 +150,17 @@ App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
          * @var array<string,mixed> $stateItem
          */
         $balancer1->addOption(new Option($stateItem));
-        $balancer2->addOption(new Option($stateItem));
+
+        if (isset($balancer2)) {
+            $balancer2->addOption(new Option($stateItem));
+        }
     }
 
-    $group
-        ->add($balancer1)
-        ->add($balancer2);
+    $group->add($balancer1);
+
+    if (isset($balancer2)) {
+        $group->add($balancer2);
+    }
 
     return $group;
 }, ['algorithm', 'request']);
@@ -242,110 +258,134 @@ App::wildcard()
     ->inject('request')
     ->inject('response')
     ->action(function (Group $balancer, Request $request, Response $response) {
-        global $state;
-        $option = $balancer->run();
+        $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        if (!isset($option)) {
-            throw new Exception('No online executor found', 404);
-        }
-
-        /**
-         * @var string $hostname
-         */
-        $hostname = $option->getState('hostname') ?? '';
-
-        if (App::isDevelopment()) {
-            Console::info("Executing on " . $hostname);
-        }
-
-        // Optimistic update. Mark runtime up instantly to prevent race conditions
-        // Next health check with confirm it started well, and update usage stats
-        $runtimeId = $request->getHeader('x-opr-runtime-id', '');
-        if (!empty($runtimeId)) {
-            $record = $state->get($hostname);
-
-            $stateItem = \json_decode($record['state'] ?? '{}', true);
-
-            if (!isset($stateItem['runtimes'])) {
-                $stateItem['runtimes'] = [];
+        $proxyRequest = function (string $hostname) use ($request) {
+            if (App::isDevelopment()) {
+                Console::info("Executing on " . $hostname);
             }
 
-            if (!isset($stateItem['runtimes'][$runtimeId])) {
-                $stateItem['runtimes'][$runtimeId] = [];
-            }
+            // Optimistic update. Mark runtime up instantly to prevent race conditions
+            // Next health check with confirm it started well, and update usage stats
+            $runtimeId = $request->getHeader('x-opr-runtime-id', '');
+            if (!empty($runtimeId)) {
+                global $state;
+                $record = $state->get($hostname);
 
-            $stateItem['runtimes'][$runtimeId]['status'] = 'pass';
-            $stateItem['runtimes'][$runtimeId]['usage'] = 0;
+                $stateItem = \json_decode($record['state'] ?? '{}', true);
 
-            $record['state'] = \json_encode($stateItem);
-
-            $state->set($hostname, $record);
-        }
-
-        $headers = \array_merge($request->getHeaders(), [
-            'authorization' => 'Bearer ' . App::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
-        ]);
-
-        // Header used for testing
-        if (App::isDevelopment()) {
-            $headers = \array_merge($headers, [
-                'x-opr-executor-hostname' => $hostname
-            ]);
-        }
-
-        $body = $request->getRawPayload();
-
-        $ch = \curl_init();
-
-        \curl_setopt($ch, CURLOPT_URL, $hostname . $request->getURI());
-        \curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
-        \curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-        \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        \curl_setopt($ch, CURLOPT_HEADER, true);
-        \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        \curl_setopt($ch, CURLOPT_TIMEOUT, \intval(App::getEnv('OPR_PROXY_MAX_TIMEOUT', '900')));
-
-        $curlHeaders = [];
-        foreach ($headers as $header => $value) {
-            $curlHeaders[] = "{$header}: {$value}";
-        }
-
-        \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
-
-        $executorResponse = \curl_exec($ch);
-
-        $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-        $error = \curl_error($ch);
-
-        $errNo = \curl_errno($ch);
-
-        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        $headers = substr(\strval($executorResponse), 0, $header_size);
-        $body = substr(\strval($executorResponse), $header_size);
-
-        \curl_close($ch);
-
-        if ($errNo !== 0) {
-            throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
-        }
-
-        if (!empty($headers)) {
-            $headers = preg_split("/\r\n|\n|\r/", $headers);
-            if ($headers) {
-                foreach ($headers as $header) {
-                    if (\str_contains($header, ':')) {
-                        [ $key, $value ] = \explode(':', $header, 2);
-
-                        $response->addHeader($key, $value);
-                    }
+                if (!isset($stateItem['runtimes'])) {
+                    $stateItem['runtimes'] = [];
                 }
-            }
-        }
 
-        $response
-            ->setStatusCode($statusCode)
-            ->send($body);
+                if (!isset($stateItem['runtimes'][$runtimeId])) {
+                    $stateItem['runtimes'][$runtimeId] = [];
+                }
+
+                $stateItem['runtimes'][$runtimeId]['status'] = 'pass';
+                $stateItem['runtimes'][$runtimeId]['usage'] = 0;
+
+                $record['state'] = \json_encode($stateItem);
+
+                $state->set($hostname, $record);
+            }
+
+            $headers = \array_merge($request->getHeaders(), [
+                'authorization' => 'Bearer ' . App::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
+            ]);
+
+            // Header used for testing
+            if (App::isDevelopment()) {
+                $headers = \array_merge($headers, [
+                    'x-opr-executor-hostname' => $hostname
+                ]);
+            }
+
+            $body = $request->getRawPayload();
+
+            $ch = \curl_init();
+
+            $$responseHeaders = [];
+
+            \curl_setopt($ch, CURLOPT_URL, $hostname . $request->getURI());
+            \curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
+            \curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+            \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            \curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($curl, $header) use (&$responseHeaders) {
+                $len = strlen($header);
+                $header = explode(':', $header, 2);
+                if (count($header) < 2) { // ignore invalid headers
+                    return $len;
+                }
+
+                $key = strtolower(trim($header[0]));
+                $responseHeaders[$key] = trim($header[1]);
+
+                return $len;
+            });
+            \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            \curl_setopt($ch, CURLOPT_TIMEOUT, \intval(App::getEnv('OPR_PROXY_MAX_TIMEOUT', '900')));
+
+            $curlHeaders = [];
+            foreach ($headers as $header => $value) {
+                $curlHeaders[] = "{$header}: {$value}";
+            }
+
+            \curl_setopt($ch, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED);
+            \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
+
+            $body = \curl_exec($ch);
+            $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = \curl_error($ch);
+            $errNo = \curl_errno($ch);
+
+            \curl_close($ch);
+
+            if ($errNo !== 0 || \is_bool($body)) {
+                throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
+            }
+
+            return [
+                'statusCode' => $statusCode,
+                'body' => $body,
+                'headers' => $responseHeaders
+            ];
+        };
+
+        if ($method === ADDRESSING_METHOD_BROADCAST) {
+            foreach ($balancer->getOptions() as $option) {
+                /**
+                 * @var string $hostname
+                 */
+                $hostname = $option->getState('hostname') ?? '';
+
+                $proxyRequest($hostname);
+            }
+
+            $response->noContent();
+        } else {
+            $option = $balancer->run();
+
+            if (!isset($option)) {
+                throw new Exception('No online executor found', 404);
+            }
+
+            /**
+             * @var string $hostname
+             */
+            $hostname = $option->getState('hostname') ?? '';
+
+            $result = $proxyRequest($hostname);
+            $headers = $result['headers'] ?? [];
+
+            foreach ($headers as $key => $value) {
+                $response->addHeader($key, $value);
+            }
+
+            $response
+                ->setStatusCode($result['statusCode'])
+                ->send($result['body']);
+        }
     });
 
 App::error()
