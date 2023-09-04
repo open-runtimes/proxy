@@ -305,7 +305,7 @@ App::wildcard()
 
             $ch = \curl_init();
 
-            $$responseHeaders = [];
+            $responseHeaders = [];
 
             \curl_setopt($ch, CURLOPT_URL, $hostname . $request->getURI());
             \curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
