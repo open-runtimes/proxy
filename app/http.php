@@ -305,7 +305,7 @@ App::wildcard()
 
             $ch = \curl_init();
 
-            $$responseHeaders = [];
+            $responseHeaders = [];
 
             \curl_setopt($ch, CURLOPT_URL, $hostname . $request->getURI());
             \curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
@@ -376,7 +376,7 @@ App::wildcard()
             $hostname = $option->getState('hostname') ?? '';
 
             $result = $proxyRequest($hostname);
-            $headers = $result['headers'] ?? [];
+            $headers = $result['headers'];
 
             foreach ($headers as $key => $value) {
                 $response->addHeader($key, $value);
