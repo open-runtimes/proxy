@@ -376,7 +376,7 @@ App::wildcard()
             $hostname = $option->getState('hostname') ?? '';
 
             $result = $proxyRequest($hostname);
-            $headers = $result['headers'] ?? [];
+            $headers = $result['headers'];
 
             foreach ($headers as $key => $value) {
                 $response->addHeader($key, $value);
