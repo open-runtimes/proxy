@@ -233,8 +233,7 @@ function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Rout
         $log->addExtra('file', $error->getFile());
         $log->addExtra('line', $error->getLine());
         $log->addExtra('trace', $error->getTraceAsString());
-        // TODO: @Meldiron Uncomment, was warning: Undefined array key "file" in Sentry.php on line 68
-        // $log->addExtra('detailedTrace', $error->getTrace());
+        $log->addExtra('detailedTrace', $error->getTrace());
         $log->setAction($action);
         $log->setEnvironment(App::isProduction() ? Log::ENVIRONMENT_PRODUCTION : Log::ENVIRONMENT_STAGING);
 
