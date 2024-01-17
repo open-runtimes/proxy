@@ -213,7 +213,7 @@ function healthCheck(bool $forceShowError = false): void
     }
 
     if (App::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
-        Client::fetch(App::getEnv('OPR_PROXY_HEALTHCHECK_URL', ''));
+        Client::fetch(App::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
     }
 }
 
