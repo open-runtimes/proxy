@@ -184,6 +184,8 @@ function healthCheck(bool $forceShowError = false): void
         ->run()
         ->getNodes();
 
+    $healthy = true;
+
     foreach ($nodes as $node) {
         $status = $node->isOnline() ? 'online' : 'offline';
         $hostname = $node->getHostname();
@@ -198,11 +200,22 @@ function healthCheck(bool $forceShowError = false): void
             }
         }
 
+        if ($status === 'offline') {
+            $healthy = false;
+        }
+
         $state->set($node->getHostname(), [
             'status' => $status,
             'hostname' => $hostname,
             'state' => \json_encode($node->getState())
         ]);
+    }
+
+    if (App::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
+        $ch = \curl_init();
+        \curl_setopt($ch, CURLOPT_URL, App::getEnv('OPR_PROXY_HEALTHCHECK_URL', ''));
+        \curl_exec($ch);
+        \curl_close($ch);
     }
 }
 

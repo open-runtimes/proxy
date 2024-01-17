@@ -54,6 +54,7 @@ services:
       - OPR_PROXY_LOGGING_PROVIDER
       - OPR_PROXY_LOGGING_CONFIG
       - OPR_PROXY_HEALTHCHECK
+      - OPR_PROXY_HEALTHCHECK_URL
   whoami1:
     hostname: whoami1
     image: containous/whoami
