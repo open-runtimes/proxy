@@ -26,6 +26,7 @@ use Utopia\Balancer\Balancer;
 use Utopia\Balancer\Group;
 use Utopia\Balancer\Option;
 use Utopia\CLI\Console;
+use Utopia\Fetch\Client;
 use Utopia\Registry\Registry;
 use Utopia\Swoole\Request;
 use Utopia\Swoole\Response;
@@ -212,10 +213,7 @@ function healthCheck(bool $forceShowError = false): void
     }
 
     if (App::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
-        $ch = \curl_init();
-        \curl_setopt($ch, CURLOPT_URL, App::getEnv('OPR_PROXY_HEALTHCHECK_URL', ''));
-        \curl_exec($ch);
-        \curl_close($ch);
+        Client::fetch(App::getEnv('OPR_PROXY_HEALTHCHECK_URL', ''));
     }
 }
 
