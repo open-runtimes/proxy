@@ -26,6 +26,7 @@ use Utopia\Balancer\Balancer;
 use Utopia\Balancer\Group;
 use Utopia\Balancer\Option;
 use Utopia\CLI\Console;
+use Utopia\Fetch\Client;
 use Utopia\Registry\Registry;
 use Utopia\Swoole\Request;
 use Utopia\Swoole\Response;
@@ -184,6 +185,8 @@ function healthCheck(bool $forceShowError = false): void
         ->run()
         ->getNodes();
 
+    $healthy = true;
+
     foreach ($nodes as $node) {
         $status = $node->isOnline() ? 'online' : 'offline';
         $hostname = $node->getHostname();
@@ -198,11 +201,19 @@ function healthCheck(bool $forceShowError = false): void
             }
         }
 
+        if ($status === 'offline') {
+            $healthy = false;
+        }
+
         $state->set($node->getHostname(), [
             'status' => $status,
             'hostname' => $hostname,
             'state' => \json_encode($node->getState())
         ]);
+    }
+
+    if (App::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
+        Client::fetch(App::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
     }
 }
 

@@ -54,6 +54,7 @@ services:
       - OPR_PROXY_LOGGING_PROVIDER
       - OPR_PROXY_LOGGING_CONFIG
       - OPR_PROXY_HEALTHCHECK
+      - OPR_PROXY_HEALTHCHECK_URL
   whoami1:
     hostname: whoami1
     image: containous/whoami
@@ -73,6 +74,7 @@ OPR_PROXY_EXECUTORS=whoami1,whoami2
 OPR_PROXY_HEALTHCHECK=disabled
 OPR_PROXY_SECRET=proxy-secret-key
 OPR_PROXY_HEALTHCHECK_INTERVAL=5000
+OPR_PROXY_HEALTHCHECK_URL=
 OPR_PROXY_ENV=development
 OPR_PROXY_EXECUTOR_SECRET=executor-secret-key
 OPR_PROXY_LOGGING_PROVIDER=
@@ -112,6 +114,7 @@ docker compose down
 | OPR_PROXY_EXECUTORS            | Comma-separated hostnames of servers under the proxy.                                                                                     |
 | OPR_PROXY_HEALTHCHECK          | Health check by HTTP request to /v1/health. 'enabled' by default. To disable, set to 'disabled'.                                          |
 | OPR_PROXY_HEALTHCHECK_INTERVAL | Delay in milliseconds between health checks. 10000 by default. Only relevant if OPR_PROXY_HEALTHCHECK is 'enabled'.                       |
+| OPR_PROXY_HEALTHCHECK_URL      | URL to send health check request to. Only relevant if OPR_PROXY_HEALTHCHECK is 'enabled'.                                                 |
 | OPR_PROXY_MAX_TIMEOUT | Maximum timeout in seconds for communication between proxy and executor. Default is 600 seconds.                       |
 | OPR_PROXY_ENV                  | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
 | OPR_PROXY_SECRET               | Secret that needs to be provided in `Authroization` header when communicating with the to proxy.                                          |

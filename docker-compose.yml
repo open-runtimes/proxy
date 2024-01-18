@@ -38,6 +38,7 @@ services:
       - OPR_PROXY_LOGGING_PROVIDER
       - OPR_PROXY_LOGGING_CONFIG
       - OPR_PROXY_HEALTHCHECK
+      - OPR_PROXY_HEALTHCHECK_URL
   mockoon1:
     container_name: mockoon1
     image: mockoon/cli:2.2.1
