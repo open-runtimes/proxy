@@ -43,13 +43,15 @@ Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION)
 // Setup Registry
 $register = new Registry();
 
-// TODO: @Meldiron put this into registry
-$count = \count(\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')));
-$state = new Table($count);
-$state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
-$state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
-$state->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
-$state->create();
+$register->set('containers', function () {
+    $count = \count(\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')));
+    $state = new Table($count);
+    $state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
+    $state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
+    $state->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
+    $state->create();
+    return $state;
+});
 
 $register->set('logger', function () {
     $providerName = Http::getEnv('OPR_PROXY_LOGGING_PROVIDER', '');
@@ -87,10 +89,10 @@ $register->set('algorithm', function () {
 // Setup Resources
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
+Http::setResource('containers', fn () => $register->get('containers'));
 
 // Balancer must NOT be registry. This has to run on every request
-Http::setResource('balancer', function (Algorithm $algorithm, Request $request) {
-    global $state;
+Http::setResource('balancer', function (Algorithm $algorithm, Request $request, Table $containers) {
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
     $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
@@ -143,7 +145,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request) 
         $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
     }
 
-    foreach ($state as $stateItem) {
+    foreach ($containers as $stateItem) {
         if (Http::isDevelopment()) {
             Console::log("Adding balancing option: " . \json_encode($stateItem));
         }
@@ -165,14 +167,10 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request) 
     }
 
     return $group;
-}, ['algorithm', 'request']);
+}, ['algorithm', 'request', 'containers']);
 
-function healthCheck(bool $forceShowError = false): void
-{
-    /**
-     * @var Table $state
-     */
-    global $state;
+$healthCheck = function (bool $forceShowError = false) use ($register): void {
+    $containers = $register->get('containers');
 
     $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
@@ -192,7 +190,7 @@ function healthCheck(bool $forceShowError = false): void
         $status = $node->isOnline() ? 'online' : 'offline';
         $hostname = $node->getHostname();
 
-        $oldState = $state->exists($hostname) ? $state->get($hostname) : null;
+        $oldState = $containers->exists($hostname) ? $containers->get($hostname) : null;
         $oldStatus = isset($oldState) ? ((array) $oldState)['status'] : null;
         if ($forceShowError === true || (isset($oldStatus) && $oldStatus !== $status)) {
             if ($status === 'online') {
@@ -206,7 +204,7 @@ function healthCheck(bool $forceShowError = false): void
             $healthy = false;
         }
 
-        $state->set($node->getHostname(), [
+        $containers->set($node->getHostname(), [
             'status' => $status,
             'hostname' => $hostname,
             'state' => \json_encode($node->getState())
@@ -216,7 +214,7 @@ function healthCheck(bool $forceShowError = false): void
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
         Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
     }
-}
+};
 
 function logError(Throwable $error, string $action, ?Logger $logger, Route $route = null): void
 {
@@ -269,10 +267,11 @@ Http::wildcard()
     ->inject('balancer')
     ->inject('request')
     ->inject('response')
-    ->action(function (Group $balancer, Request $request, Response $response) {
+    ->inject('containers')
+    ->action(function (Group $balancer, Request $request, Response $response, Table $containers) {
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        $proxyRequest = function (string $hostname) use ($request) {
+        $proxyRequest = function (string $hostname) use ($request, $containers) {
             if (Http::isDevelopment()) {
                 Console::info("Executing on " . $hostname);
             }
@@ -281,8 +280,7 @@ Http::wildcard()
             // Next health check with confirm it started well, and update usage stats
             $runtimeId = $request->getHeader('x-opr-runtime-id', '');
             if (!empty($runtimeId)) {
-                global $state;
-                $record = $state->get($hostname);
+                $record = $containers->get($hostname);
 
                 $stateItem = \json_decode($record['state'] ?? '{}', true);
 
@@ -299,7 +297,7 @@ Http::wildcard()
 
                 $record['state'] = \json_encode($stateItem);
 
-                $state->set($hostname, $record);
+                $containers->set($hostname, $record);
             }
 
             $headers = \array_merge($request->getHeaders(), [
@@ -452,7 +450,8 @@ if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
     $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
     foreach ($executors as $executor) {
-        $state->set($executor, [
+        $containers = $register->get('containers');
+        $containers->set($executor, [
             'status' => 'online',
             'hostname' => $executor,
             'state' =>  \json_encode([])
@@ -460,12 +459,12 @@ if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
     }
 }
 
-run(function () {
+run(function () use ($healthCheck) {
     // Initial health check + start timer
-    healthCheck(true);
+    $healthCheck(true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck(false));
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(false));
 
     // Start HTTP server
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80')), 'UTC');
