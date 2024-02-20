@@ -2,7 +2,7 @@
 
 namespace OpenRuntimes\Proxy\Health;
 
-use Utopia\App;
+use Utopia\Http\Http;
 
 use function Swoole\Coroutine\batch;
 
@@ -46,7 +46,7 @@ class Health
                     \curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                     \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
                     \curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'authorization: Bearer ' . App::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
+                        'authorization: Bearer ' . Http::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
                     ]);
 
                     $executorResponse = \curl_exec($ch);

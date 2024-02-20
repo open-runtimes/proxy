@@ -4,13 +4,9 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
-use Swoole\Http\Server;
-use Swoole\Http\Request as SwooleRequest;
-use Swoole\Http\Response as SwooleResponse;
 use Swoole\Runtime;
 use Swoole\Table;
 use Swoole\Timer;
-use Utopia\App;
 use Utopia\Logger\Log;
 use Utopia\Logger\Logger;
 use Utopia\Logger\Adapter\AppSignal;
@@ -27,9 +23,14 @@ use Utopia\Balancer\Group;
 use Utopia\Balancer\Option;
 use Utopia\CLI\Console;
 use Utopia\Fetch\Client;
+use Utopia\Http\Adapter\Swoole\Server;
+use Utopia\Http\Http;
+use Utopia\Http\Request;
+use Utopia\Http\Response;
+use Utopia\Http\Route;
 use Utopia\Registry\Registry;
-use Utopia\Swoole\Request;
-use Utopia\Swoole\Response;
+
+use function Swoole\Coroutine\run;
 
 const ADDRESSING_METHOD_ANYCAST_EFFICIENT = 'anycast-efficient';
 const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
@@ -37,13 +38,13 @@ const ADDRESSING_METHOD_BROADCAST = 'broadcast';
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
-App::setMode((string) App::getEnv('OPR_PROXY_ENV', App::MODE_TYPE_PRODUCTION));
+Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION));
 
 // Setup Registry
 $register = new Registry();
 
 // TODO: @Meldiron put this into registry
-$count = \count(\explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', '')));
+$count = \count(\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')));
 $state = new Table($count);
 $state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
 $state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
@@ -51,8 +52,8 @@ $state->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
 $state->create();
 
 $register->set('logger', function () {
-    $providerName = App::getEnv('OPR_PROXY_LOGGING_PROVIDER', '');
-    $providerConfig = App::getEnv('OPR_PROXY_LOGGING_CONFIG', '');
+    $providerName = Http::getEnv('OPR_PROXY_LOGGING_PROVIDER', '');
+    $providerConfig = Http::getEnv('OPR_PROXY_LOGGING_CONFIG', '');
     $logger = null;
 
     if (!empty($providerName) && !empty($providerConfig) && Logger::hasProvider($providerName)) {
@@ -71,7 +72,7 @@ $register->set('logger', function () {
 });
 
 $register->set('algorithm', function () {
-    $algoType = App::getEnv('OPR_PROXY_ALGORITHM', '');
+    $algoType = Http::getEnv('OPR_PROXY_ALGORITHM', '');
     $algo = match ($algoType) {
         'round-robin' => new RoundRobin(0),
         'first' => new First(),
@@ -84,11 +85,11 @@ $register->set('algorithm', function () {
 });
 
 // Setup Resources
-App::setResource('logger', fn () => $register->get('logger'));
-App::setResource('algorithm', fn () => $register->get('algorithm'));
+Http::setResource('logger', fn () => $register->get('logger'));
+Http::setResource('algorithm', fn () => $register->get('algorithm'));
 
 // Balancer must NOT be registry. This has to run on every request
-App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
+Http::setResource('balancer', function (Algorithm $algorithm, Request $request) {
     global $state;
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
     $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
@@ -143,7 +144,7 @@ App::setResource('balancer', function (Algorithm $algorithm, Request $request) {
     }
 
     foreach ($state as $stateItem) {
-        if (App::isDevelopment()) {
+        if (Http::isDevelopment()) {
             Console::log("Adding balancing option: " . \json_encode($stateItem));
         }
 
@@ -173,7 +174,7 @@ function healthCheck(bool $forceShowError = false): void
      */
     global $state;
 
-    $executors = \explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', ''));
+    $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
     $health = new Health();
 
@@ -212,12 +213,12 @@ function healthCheck(bool $forceShowError = false): void
         ]);
     }
 
-    if (App::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
-        Client::fetch(App::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
+    if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
+        Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
     }
 }
 
-function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Route $route = null): void
+function logError(Throwable $error, string $action, ?Logger $logger, Route $route = null): void
 {
     Console::error('[Error] Type: ' . get_class($error));
     Console::error('[Error] Message: ' . $error->getMessage());
@@ -225,7 +226,7 @@ function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Rout
     Console::error('[Error] Line: ' . $error->getLine());
 
     if ($logger) {
-        $version = (string) App::getEnv('OPR_PROXY_VERSION', 'UNKNOWN');
+        $version = (string) Http::getEnv('OPR_PROXY_VERSION', 'UNKNOWN');
 
         $log = new Log();
         $log->setNamespace('proxy');
@@ -247,24 +248,24 @@ function logError(Throwable $error, string $action, ?Logger $logger, Utopia\Rout
         // TODO: @Meldiron Uncomment, was warning: Undefined array key "file" in Sentry.php on line 68
         // $log->addExtra('detailedTrace', $error->getTrace());
         $log->setAction($action);
-        $log->setEnvironment(App::isProduction() ? Log::ENVIRONMENT_PRODUCTION : Log::ENVIRONMENT_STAGING);
+        $log->setEnvironment(Http::isProduction() ? Log::ENVIRONMENT_PRODUCTION : Log::ENVIRONMENT_STAGING);
 
         $responseCode = $logger->addLog($log);
         Console::info('Proxy log pushed with status code: ' . $responseCode);
     }
 }
 
-App::init()
+Http::init()
     ->inject('request')
     ->action(function (Request $request) {
         $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
 
-        if (empty($secretKey) || $secretKey !== App::getEnv('OPR_PROXY_SECRET', '')) {
+        if (empty($secretKey) || $secretKey !== Http::getEnv('OPR_PROXY_SECRET', '')) {
             throw new Exception('Incorrect proxy key.', 401);
         }
     });
 
-App::wildcard()
+Http::wildcard()
     ->inject('balancer')
     ->inject('request')
     ->inject('response')
@@ -272,7 +273,7 @@ App::wildcard()
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
         $proxyRequest = function (string $hostname) use ($request) {
-            if (App::isDevelopment()) {
+            if (Http::isDevelopment()) {
                 Console::info("Executing on " . $hostname);
             }
 
@@ -302,11 +303,11 @@ App::wildcard()
             }
 
             $headers = \array_merge($request->getHeaders(), [
-                'authorization' => 'Bearer ' . App::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
+                'authorization' => 'Bearer ' . Http::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
             ]);
 
             // Header used for testing
-            if (App::isDevelopment()) {
+            if (Http::isDevelopment()) {
                 $headers = \array_merge($headers, [
                     'x-opr-executor-hostname' => $hostname
                 ]);
@@ -335,7 +336,7 @@ App::wildcard()
                 return $len;
             });
             \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-            \curl_setopt($ch, CURLOPT_TIMEOUT, \intval(App::getEnv('OPR_PROXY_MAX_TIMEOUT', '900')));
+            \curl_setopt($ch, CURLOPT_TIMEOUT, \intval(Http::getEnv('OPR_PROXY_MAX_TIMEOUT', '900')));
 
             $curlHeaders = [];
             foreach ($headers as $header => $value) {
@@ -399,13 +400,13 @@ App::wildcard()
         }
     });
 
-App::error()
+Http::error()
     ->inject('utopia')
     ->inject('error')
     ->inject('logger')
     ->inject('request')
     ->inject('response')
-    ->action(function (App $utopia, throwable $error, ?Logger $logger, Request $request, Response $response) {
+    ->action(function (Http $utopia, throwable $error, ?Logger $logger, Request $request, Response $response) {
         $route = $utopia->match($request);
         logError($error, "httpError", $logger, $route);
 
@@ -434,7 +435,7 @@ App::error()
             'file' => $error->getFile(),
             'line' => $error->getLine(),
             'trace' => $error->getTrace(),
-            'version' => App::getEnv('OPR_PROXY_VERSION', 'UNKNOWN')
+            'version' => Http::getEnv('OPR_PROXY_VERSION', 'UNKNOWN')
         ];
 
         $response
@@ -447,13 +448,8 @@ App::error()
     });
 
 // If no health check, mark all as online
-if (App::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
-    /**
-     * @var Table $state
-     */
-    global $state;
-
-    $executors = \explode(',', (string) App::getEnv('OPR_PROXY_EXECUTORS', ''));
+if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
+    $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
     foreach ($executors as $executor) {
         $state->set($executor, [
@@ -464,72 +460,17 @@ if (App::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
     }
 }
 
-// TODO: @Meldiron Switch to coroutine-style when utopia is ready
-$http = new Server("0.0.0.0", \intval(App::getEnv('PORT', '80')));
-
-$payloadSize = 6 * (1024 * 1024); // 6MB
-$workerNumber = swoole_cpu_num() * \intval(App::getEnv('_APP_WORKER_PER_CORE', '6'));
-$http
-    ->set([
-        'worker_num' => $workerNumber,
-        'open_http2_protocol' => true,
-        // 'document_root' => __DIR__.'/../public',
-        // 'enable_static_handler' => true,
-        'http_compression' => true,
-        'http_compression_level' => 6,
-        'package_max_length' => $payloadSize,
-        'buffer_output_size' => $payloadSize,
-    ]);
-
-$http->on('WorkerStart', function ($server, $workerId) {
-    Console::success('Worker ' . ++$workerId . ' started successfully');
-});
-
-$http->on('BeforeReload', function ($server, $workerId) {
-    Console::success('Starting reload...');
-});
-
-$http->on('AfterReload', function ($server, $workerId) {
-    Console::success('Reload completed...');
-});
-
-$http->on('start', function (Server $http) {
+run(function () {
     // Initial health check + start timer
     healthCheck(true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(App::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck(false));
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck(false));
+
+    // Start HTTP server
+    $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80')), 'UTC');
 
     Console::success('Functions proxy is ready.');
+
+    $http->start();
 });
-
-$http->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) {
-    $request = new Request($swooleRequest);
-    $response = new Response($swooleResponse);
-
-    $app = new App('UTC');
-
-    try {
-        $app->run($request, $response);
-    } catch (\Throwable $th) {
-        $code = 500;
-
-        /**
-         * @var Logger $logger
-         */
-        $logger = $app->getResource('logger');
-        logError($th, "serverError", $logger);
-        $swooleResponse->setStatusCode($code);
-        $output = [
-            'message' => 'Error: ' . $th->getMessage(),
-            'code' => $code,
-            'file' => $th->getFile(),
-            'line' => $th->getLine(),
-            'trace' => $th->getTrace()
-        ];
-
-        $swooleResponse->end(\json_encode($output));
-    }
-});
-
-$http->start();
