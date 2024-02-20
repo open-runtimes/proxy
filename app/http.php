@@ -43,13 +43,15 @@ Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION)
 // Setup Registry
 $register = new Registry();
 
-// TODO: @Meldiron put this into registry
-$count = \count(\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')));
-$state = new Table($count);
-$state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
-$state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
-$state->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
-$state->create();
+$register->set('containers', function () {
+    $count = \count(\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')));
+    $state = new Table($count);
+    $state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
+    $state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
+    $state->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
+    $state->create();
+    return $state;
+});
 
 $register->set('logger', function () {
     $providerName = Http::getEnv('OPR_PROXY_LOGGING_PROVIDER', '');
@@ -87,10 +89,10 @@ $register->set('algorithm', function () {
 // Setup Resources
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
+Http::setResource('containers', fn () => $register->get('containers'));
 
 // Balancer must NOT be registry. This has to run on every request
-Http::setResource('balancer', function (Algorithm $algorithm, Request $request) {
-    global $state;
+Http::setResource('balancer', function (Algorithm $algorithm, Request $request, Table $containers) {
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
     $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
@@ -143,7 +145,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request) 
         $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
     }
 
-    foreach ($state as $stateItem) {
+    foreach ($containers as $stateItem) {
         if (Http::isDevelopment()) {
             Console::log("Adding balancing option: " . \json_encode($stateItem));
         }
@@ -165,7 +167,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request) 
     }
 
     return $group;
-}, ['algorithm', 'request']);
+}, ['algorithm', 'request', 'containers']);
 
 function healthCheck(bool $forceShowError = false): void
 {
@@ -452,7 +454,8 @@ if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
     $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
     foreach ($executors as $executor) {
-        $state->set($executor, [
+        $containers = $register->get('containers');
+        $containers->set($executor, [
             'status' => 'online',
             'hostname' => $executor,
             'state' =>  \json_encode([])
