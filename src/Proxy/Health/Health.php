@@ -62,7 +62,7 @@ class Health
                             $node->setOnline(true);
                             $node->setState($body);
                         } else {
-                            $message = 'Response does not include "pass" status.';
+                            $message = 'Response does not include "pass" status: ' . $executorResponse;
                             $node->setOnline(false);
                             $node->setState([ 'message' => $message ]);
                         }

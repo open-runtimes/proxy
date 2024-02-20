@@ -171,6 +171,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
 
 $healthCheck = function (bool $forceShowError = false) use ($register): void {
     $containers = $register->get('containers');
+    $logger = $register->get('logger');
 
     $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
@@ -194,9 +195,13 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
         $oldStatus = isset($oldState) ? ((array) $oldState)['status'] : null;
         if ($forceShowError === true || (isset($oldStatus) && $oldStatus !== $status)) {
             if ($status === 'online') {
-                Console::success('Executor "' . $node->getHostname() . '" went online.');
+                $message = 'Executor "' . $node->getHostname() . '" went online.';
+                Console::success($message);
             } else {
-                Console::error('Executor "' . $node->getHostname() . '" went offline.');
+                $message = $node->getState()['message'] ?? 'Unexpected error.';
+                $message = 'Executor "' . $node->getHostname() . '" went offline: ' . $message;
+                $error = new Exception($message, 500);
+                logError($error, "helathChekError", $logger, null);
             }
         }
 
@@ -224,7 +229,7 @@ function logError(Throwable $error, string $action, ?Logger $logger, Route $rout
     Console::error('[Error] Line: ' . $error->getLine());
 
     if ($logger) {
-        $version = (string) Http::getEnv('OPR_PROXY_VERSION', 'UNKNOWN');
+        $version = (string) Http::getEnv('OPR_PROXY_VERSION') ?: 'UNKNOWN';
 
         $log = new Log();
         $log->setNamespace('proxy');
