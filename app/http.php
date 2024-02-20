@@ -447,26 +447,20 @@ Http::error()
         $response->json($output);
     });
 
-run(function () {
-    // If no health check, mark all as online
-    if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
-        /**
-         * @var Table $state
-         */
-        global $state;
+// If no health check, mark all as online
+if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
+    $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
-        $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
-
-        foreach ($executors as $executor) {
-            $state->set($executor, [
-                'status' => 'online',
-                'hostname' => $executor,
-                'state' =>  \json_encode([])
-            ]);
-        }
+    foreach ($executors as $executor) {
+        $state->set($executor, [
+            'status' => 'online',
+            'hostname' => $executor,
+            'state' =>  \json_encode([])
+        ]);
     }
+}
 
-
+run(function () {
     // Initial health check + start timer
     healthCheck(true);
 
