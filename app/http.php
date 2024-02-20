@@ -229,7 +229,7 @@ function logError(Throwable $error, string $action, ?Logger $logger, Route $rout
     Console::error('[Error] Line: ' . $error->getLine());
 
     if ($logger) {
-        $version = (string) Http::getEnv('OPR_PROXY_VERSION', 'UNKNOWN');
+        $version = (string) Http::getEnv('OPR_PROXY_VERSION') ?: 'UNKNOWN';
 
         $log = new Log();
         $log->setNamespace('proxy');
