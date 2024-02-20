@@ -169,13 +169,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     return $group;
 }, ['algorithm', 'request', 'containers']);
 
-function healthCheck(bool $forceShowError = false): void
-{
-    /**
-     * @var Registry $register
-     */
-    global $register;
-
+$healthCheck = function (bool $forceShowError = false) use ($register): void {
     $containers = $register->get('containers');
 
     $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
@@ -220,7 +214,7 @@ function healthCheck(bool $forceShowError = false): void
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
         Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
     }
-}
+};
 
 function logError(Throwable $error, string $action, ?Logger $logger, Route $route = null): void
 {
@@ -465,12 +459,12 @@ if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
     }
 }
 
-run(function () {
+run(function () use ($healthCheck) {
     // Initial health check + start timer
-    healthCheck(true);
+    $healthCheck(true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck(false));
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(false));
 
     // Start HTTP server
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80')), 'UTC');
