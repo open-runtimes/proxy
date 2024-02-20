@@ -172,9 +172,11 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
 function healthCheck(bool $forceShowError = false): void
 {
     /**
-     * @var Table $state
+     * @var Registry $register
      */
-    global $state;
+    global $register;
+
+    $containers = $register->get('containers');
 
     $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
@@ -194,7 +196,7 @@ function healthCheck(bool $forceShowError = false): void
         $status = $node->isOnline() ? 'online' : 'offline';
         $hostname = $node->getHostname();
 
-        $oldState = $state->exists($hostname) ? $state->get($hostname) : null;
+        $oldState = $containers->exists($hostname) ? $containers->get($hostname) : null;
         $oldStatus = isset($oldState) ? ((array) $oldState)['status'] : null;
         if ($forceShowError === true || (isset($oldStatus) && $oldStatus !== $status)) {
             if ($status === 'online') {
@@ -208,7 +210,7 @@ function healthCheck(bool $forceShowError = false): void
             $healthy = false;
         }
 
-        $state->set($node->getHostname(), [
+        $containers->set($node->getHostname(), [
             'status' => $status,
             'hostname' => $hostname,
             'state' => \json_encode($node->getState())
@@ -271,10 +273,11 @@ Http::wildcard()
     ->inject('balancer')
     ->inject('request')
     ->inject('response')
-    ->action(function (Group $balancer, Request $request, Response $response) {
+    ->inject('containers')
+    ->action(function (Group $balancer, Request $request, Response $response, Table $containers) {
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        $proxyRequest = function (string $hostname) use ($request) {
+        $proxyRequest = function (string $hostname) use ($request, $containers) {
             if (Http::isDevelopment()) {
                 Console::info("Executing on " . $hostname);
             }
@@ -283,8 +286,7 @@ Http::wildcard()
             // Next health check with confirm it started well, and update usage stats
             $runtimeId = $request->getHeader('x-opr-runtime-id', '');
             if (!empty($runtimeId)) {
-                global $state;
-                $record = $state->get($hostname);
+                $record = $containers->get($hostname);
 
                 $stateItem = \json_decode($record['state'] ?? '{}', true);
 
@@ -301,7 +303,7 @@ Http::wildcard()
 
                 $record['state'] = \json_encode($stateItem);
 
-                $state->set($hostname, $record);
+                $containers->set($hostname, $record);
             }
 
             $headers = \array_merge($request->getHeaders(), [
