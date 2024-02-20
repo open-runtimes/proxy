@@ -398,6 +398,27 @@ Http::wildcard()
         }
     });
 
+Http::get('/v1/proxy/containers')
+    ->inject('response')
+    ->inject('containers')
+    ->action(function (Response $response, Table $containers) {
+        $results = [];
+
+        foreach ($containers as $stateItem) {
+            $state = \json_decode($stateItem['state'] ?? '{}', true);
+            $results[] = [
+                'status' => $stateItem['status'] ?? 'unknown',
+                'hostname' => $stateItem['hostname'] ?? 'unknown',
+                'stateStatus' => $state['status'] ?? 'unknown',
+                'stateUsage' => $state['usage'] ?? -1,
+            ];
+        }
+
+        $response
+            ->setStatusCode(200)
+            ->json($results);
+    });
+
 Http::error()
     ->inject('utopia')
     ->inject('error')

@@ -18,6 +18,29 @@ class HTTPTest extends TestCase
         ;
     }
 
+    public function testContainersEndpoint(): void
+    {
+        $response = (array) $this->client->call(Client::METHOD_GET, '/v1/proxy/containers');
+        $headers = (array) $response['headers'];
+        $body = (array) $response['body'];
+
+        $this->assertEquals(200, $headers['status-code']);
+        $this->assertCount(2, $body);
+
+        $this->assertEquals("online", $body[0]["status"]);
+        $this->assertEquals("online", $body[1]["status"]);
+
+        $this->assertEquals("pass", $body[0]["stateStatus"]);
+        $this->assertEquals("pass", $body[1]["stateStatus"]);
+
+        $this->assertLessThanOrEqual(100, $body[0]["stateUsage"]);
+        $this->assertLessThanOrEqual(100, $body[1]["stateUsage"]);
+
+        $hostnames = [ $body[0]["hostname"], $body[0]["hostname"] ];
+        $this->assertArrayHasKey("mockmoon1", $hostnames);
+        $this->assertArrayHasKey("mockmoon2", $hostnames);
+    }
+
     public function testBalancer(): void
     {
         $response = (array) $this->client->call(Client::METHOD_GET, '/v1/ping');
