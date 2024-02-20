@@ -30,6 +30,8 @@ use Utopia\Http\Response;
 use Utopia\Http\Route;
 use Utopia\Registry\Registry;
 
+use function Swoole\Coroutine\run;
+
 const ADDRESSING_METHOD_ANYCAST_EFFICIENT = 'anycast-efficient';
 const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
 const ADDRESSING_METHOD_BROADCAST = 'broadcast';
@@ -445,35 +447,36 @@ Http::error()
         $response->json($output);
     });
 
-// If no health check, mark all as online
-if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
-    /**
-     * @var Table $state
-     */
-    global $state;
+run(function () {
+    // If no health check, mark all as online
+    if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
+        /**
+         * @var Table $state
+         */
+        global $state;
 
-    $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
+        $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
-    foreach ($executors as $executor) {
-        $state->set($executor, [
-            'status' => 'online',
-            'hostname' => $executor,
-            'state' =>  \json_encode([])
-        ]);
+        foreach ($executors as $executor) {
+            $state->set($executor, [
+                'status' => 'online',
+                'hostname' => $executor,
+                'state' =>  \json_encode([])
+            ]);
+        }
     }
-}
 
-$http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80')), 'UTC');
 
-$http->onStart()
-    ->action(function () {
-        // Initial health check + start timer
-        healthCheck(true);
+    // Initial health check + start timer
+    healthCheck(true);
 
-        $defaultInterval = '10000'; // 10 seconds
-        Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck(false));
+    $defaultInterval = '10000'; // 10 seconds
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => healthCheck(false));
 
-        Console::success('Functions proxy is ready.');
-    });
+    // Start HTTP server
+    $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80')), 'UTC');
 
-$http->start();
+    Console::success('Functions proxy is ready.');
+
+    $http->start();
+});
