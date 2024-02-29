@@ -74,4 +74,6 @@ RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 
 EXPOSE 80
 
+HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 CMD curl -s -H "Authorization: Bearer ${OPR_PROXY_SECRET}" --fail http://127.0.0.1:80/v1/proxy/health
+
 CMD [ "php", "app/http.php" ]

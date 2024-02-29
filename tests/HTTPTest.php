@@ -13,9 +13,17 @@ class HTTPTest extends TestCase
         $this->client = new Client();
 
         $this->client
-            ->setEndpoint('http://openruntimes-proxy/')
+            ->setEndpoint('http://openruntimes-proxy')
             ->addHeader('authorization', 'Bearer proxy-secret-key');
         ;
+    }
+
+    public function testHealthEndpoint(): void
+    {
+        $response = (array) $this->client->call(Client::METHOD_GET, '/v1/proxy/health');
+
+        $this->assertEquals(200, $response['headers']['status-code']);
+        $this->assertEquals('OK', $response['body']);
     }
 
     public function testBalancer(): void
