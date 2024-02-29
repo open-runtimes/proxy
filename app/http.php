@@ -271,6 +271,14 @@ Http::init()
         }
     });
 
+Http::get('/v1/proxy/health')
+    ->inject('response')
+    ->action(function (Response $response) {
+        $response
+            ->setStatusCode(200)
+            ->send('OK');
+    });
+
 Http::wildcard()
     ->inject('balancer')
     ->inject('request')
