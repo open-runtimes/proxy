@@ -32,6 +32,9 @@ use Utopia\Registry\Registry;
 
 use function Swoole\Coroutine\run;
 
+// Unlimited memory limit to handle as many coroutines/requests as possible
+ini_set('memory_limit', '-1');
+
 const ADDRESSING_METHOD_ANYCAST_EFFICIENT = 'anycast-efficient';
 const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
 const ADDRESSING_METHOD_BROADCAST = 'broadcast';
