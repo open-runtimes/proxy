@@ -204,7 +204,7 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
                 $message = $node->getState()['message'] ?? 'Unexpected error.';
                 $message = 'Executor "' . $node->getHostname() . '" went offline: ' . $message;
                 $error = new Exception($message, 500);
-                logError($error, "helathChekError", $logger, null);
+                logError($error, "healthCheckError", $logger, null);
             }
         }
 
