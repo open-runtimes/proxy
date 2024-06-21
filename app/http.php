@@ -220,7 +220,11 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
     }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
-        Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
+        try {
+            Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
+        } catch (\Throwable $th) {
+            logError($th, 'healthCheckError', $logger, null);
+        }
     }
 };
 
