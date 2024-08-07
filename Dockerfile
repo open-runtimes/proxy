@@ -19,12 +19,12 @@ RUN \
   make \
   automake \
   autoconf \
-  curl-dev \
   gcc \
   g++ \
   git \
   linux-headers \
-  openssl-dev
+  openssl-dev \
+  curl-dev
   
 RUN docker-php-ext-install sockets
 
@@ -53,9 +53,10 @@ RUN \
   make \
   automake \
   autoconf \
+  curl-dev \
   gcc \
   g++ \
-  curl-dev \
+  linux-headers \
   && apk add --no-cache \
   libstdc++ \
   && docker-php-ext-install sockets \
