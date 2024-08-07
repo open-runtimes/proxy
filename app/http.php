@@ -291,7 +291,7 @@ Http::wildcard()
     ->action(function (Group $balancer, Request $request, Response $response, Table $containers) {
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        $proxyRequest = function (string $hostname) use ($request, $containers) {
+        $proxyRequest = function (string $hostname, ?Response $response = null) use ($request, $containers) {
             if (Http::isDevelopment()) {
                 Console::info("Executing on " . $hostname);
             }
@@ -356,6 +356,19 @@ Http::wildcard()
             \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
             \curl_setopt($ch, CURLOPT_TIMEOUT, \intval(Http::getEnv('OPR_PROXY_MAX_TIMEOUT', '900')));
 
+            // Chunked response support
+            $isChunked = false;
+            if ($response !== null) {
+                $callback = function ($data) use (&$isChunked, $response) {
+                    $isChunked = true;
+                    $response->write($data);
+                };
+                \curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use ($callback) {
+                    $callback($data);
+                    return \strlen($data);
+                });
+            }
+
             $curlHeaders = [];
             foreach ($headers as $header => $value) {
                 $curlHeaders[] = "{$header}: {$value}";
@@ -364,22 +377,29 @@ Http::wildcard()
             \curl_setopt($ch, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED);
             \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
 
-            $body = \curl_exec($ch);
+            \curl_exec($ch);
             $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $error = \curl_error($ch);
             $errNo = \curl_errno($ch);
 
             \curl_close($ch);
 
-            if ($errNo !== 0 || \is_bool($body)) {
+            if ($errNo !== 0) {
+                if ($response !== null) {
+                    $response->end();
+                }
+
                 throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
             }
 
-            return [
-                'statusCode' => $statusCode,
-                'body' => $body,
-                'headers' => $responseHeaders
-            ];
+            if ($response !== null) {
+                foreach ($responseHeaders as $key => $value) {
+                    $response->addHeader($key, $value);
+                }
+
+                $response->setStatusCode($statusCode);
+                $response->end();
+            }
         };
 
         if ($method === ADDRESSING_METHOD_BROADCAST) {
@@ -388,8 +408,7 @@ Http::wildcard()
                  * @var string $hostname
                  */
                 $hostname = $option->getState('hostname') ?? '';
-
-                $proxyRequest($hostname);
+                $proxyRequest($hostname, null);
             }
 
             $response->noContent();
@@ -404,17 +423,7 @@ Http::wildcard()
              * @var string $hostname
              */
             $hostname = $option->getState('hostname') ?? '';
-
-            $result = $proxyRequest($hostname);
-            $headers = $result['headers'];
-
-            foreach ($headers as $key => $value) {
-                $response->addHeader($key, $value);
-            }
-
-            $response
-                ->setStatusCode($result['statusCode'])
-                ->send($result['body']);
+            $proxyRequest($hostname, $response);
         }
     });
 
