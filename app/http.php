@@ -377,6 +377,11 @@ Http::wildcard()
             \curl_setopt($ch, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED);
             \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
 
+            // Enforced headers before chunked responose starts
+            if ($response != null) {
+                $response->sendHeader('content-type', 'application/json'); // TODO: Find way to get those dynamically
+            }
+
             \curl_exec($ch);
             $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $error = \curl_error($ch);
