@@ -27,6 +27,7 @@ use Utopia\Http\Adapter\Swoole\Server;
 use Utopia\Http\Http;
 use Utopia\Http\Request;
 use Utopia\Http\Response;
+use Utopia\Http\Adapter\Swoole\Response as SwooleResponse;
 use Utopia\Http\Route;
 use Utopia\Registry\Registry;
 
@@ -288,10 +289,10 @@ Http::wildcard()
     ->inject('request')
     ->inject('response')
     ->inject('containers')
-    ->action(function (Group $balancer, Request $request, Response $response, Table $containers) {
+    ->action(function (Group $balancer, Request $request, SwooleResponse $response, Table $containers) {
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        $proxyRequest = function (string $hostname, ?Response $response = null) use ($request, $containers) {
+        $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $containers) {
             if (Http::isDevelopment()) {
                 Console::info("Executing on " . $hostname);
             }
@@ -359,14 +360,57 @@ Http::wildcard()
             // Chunked response support
             $isChunked = false;
             if ($response !== null) {
-                $callback = function ($data) use (&$isChunked, $response) {
+                $isBody = false;
+                $callback = function ($data) use (&$isChunked, $response, &$isBody) {
                     $isChunked = true;
-                    $response->write($data);
+
+                    if ($isBody) {
+                        $response->getSwooleResponse()->write($data);
+                        return;
+                    }
+
+                    $lines = \explode("\n", $data);
+
+                    $index = -1;
+                    while (count($lines) > 0) {
+                        $index++;
+
+                        $line = \array_shift($lines);
+                        $line = \trim($line, "\r");
+
+                        if (empty($line)) {
+                            if ($index === 0) {
+                                $isBody = true;
+                            }
+                            break;
+                        }
+
+                        if (\str_starts_with($line, 'HTTP/')) {
+                            $statusCode = \explode(' ', $line, 3)[1] ?? 0;
+                            if (!empty($statusCode)) {
+                                $response->getSwooleResponse()->status($statusCode);
+                            }
+                        } else {
+                            [ $header, $headerValue ] = \explode(': ', $line, 2);
+                            $response->getSwooleResponse()->header($header, $headerValue);
+                        }
+                    }
+
+                    if (count($lines) > 0) {
+                        $isBody = true;
+
+                        $data = \implode("\n", $lines);
+                        $data = \trim($data, "\r");
+                        if (\strlen($data) > 0) {
+                            $response->getSwooleResponse()->write($data);
+                        }
+                    }
                 };
                 \curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use ($callback) {
                     $callback($data);
                     return \strlen($data);
                 });
+                \curl_setopt($ch, CURLOPT_HEADER, 1);
             }
 
             $curlHeaders = [];
@@ -376,11 +420,6 @@ Http::wildcard()
 
             \curl_setopt($ch, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED);
             \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
-
-            // Enforced headers before chunked responose starts
-            if ($response != null) {
-                $response->sendHeader('content-type', 'application/json'); // TODO: Find way to get those dynamically
-            }
 
             \curl_exec($ch);
             $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
