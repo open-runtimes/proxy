@@ -10,9 +10,9 @@ RUN composer install --ignore-platform-reqs --optimize-autoloader \
     --no-plugins --no-scripts --prefer-dist
 
 # Prepare generic compiler
-FROM php:8.0.18-cli-alpine3.15 as compile
+FROM php:8.3.7-cli-alpine3.19 as compile
 
-ENV PHP_SWOOLE_VERSION=v4.8.10
+ENV PHP_SWOOLE_VERSION=v5.1.2
 
 RUN \
   apk add --no-cache --virtual .deps \
@@ -22,7 +22,9 @@ RUN \
   gcc \
   g++ \
   git \
-  openssl-dev
+  linux-headers \
+  openssl-dev \
+  curl-dev
   
 RUN docker-php-ext-install sockets
 
@@ -33,12 +35,12 @@ RUN \
   git clone --depth 1 --branch $PHP_SWOOLE_VERSION https://github.com/swoole/swoole-src.git && \
   cd swoole-src && \
   phpize && \
-  ./configure --enable-sockets --enable-http2 --enable-openssl && \
+  ./configure --enable-sockets --enable-http2 --enable-openssl --enable-swoole-curl && \
   make && make install && \
   cd ..
 
 # Proxy
-FROM php:8.0.18-cli-alpine3.15 as final
+FROM php:8.3.7-cli-alpine3.19 as final
 
 ARG OPR_PROXY_VERSION
 ENV OPR_PROXY_VERSION=$OPR_PROXY_VERSION
@@ -51,9 +53,10 @@ RUN \
   make \
   automake \
   autoconf \
+  curl-dev \
   gcc \
   g++ \
-  curl-dev \
+  linux-headers \
   && apk add --no-cache \
   libstdc++ \
   && docker-php-ext-install sockets \
@@ -68,7 +71,7 @@ COPY ./src /usr/local/src
 
 # Extensions and libraries
 COPY --from=composer /usr/local/src/vendor /usr/local/vendor
-COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20200930/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20200930/
+COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20230831/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
 
 RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 

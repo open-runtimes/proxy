@@ -27,6 +27,7 @@ use Utopia\Http\Adapter\Swoole\Server;
 use Utopia\Http\Http;
 use Utopia\Http\Request;
 use Utopia\Http\Response;
+use Utopia\Http\Adapter\Swoole\Response as SwooleResponse;
 use Utopia\Http\Route;
 use Utopia\Registry\Registry;
 
@@ -288,10 +289,10 @@ Http::wildcard()
     ->inject('request')
     ->inject('response')
     ->inject('containers')
-    ->action(function (Group $balancer, Request $request, Response $response, Table $containers) {
+    ->action(function (Group $balancer, Request $request, SwooleResponse $response, Table $containers) {
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        $proxyRequest = function (string $hostname) use ($request, $containers) {
+        $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $containers) {
             if (Http::isDevelopment()) {
                 Console::info("Executing on " . $hostname);
             }
@@ -356,6 +357,62 @@ Http::wildcard()
             \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
             \curl_setopt($ch, CURLOPT_TIMEOUT, \intval(Http::getEnv('OPR_PROXY_MAX_TIMEOUT', '900')));
 
+            // Chunked response support
+            $isChunked = false;
+            if ($response !== null) {
+                $isBody = false;
+                $callback = function ($data) use (&$isChunked, $response, &$isBody) {
+                    $isChunked = true;
+
+                    if ($isBody) {
+                        $response->getSwooleResponse()->write($data);
+                        return;
+                    }
+
+                    $lines = \explode("\n", $data);
+
+                    $index = -1;
+                    while (count($lines) > 0) {
+                        $index++;
+
+                        $line = \array_shift($lines);
+                        $line = \trim($line, "\r");
+
+                        if (empty($line)) {
+                            if ($index === 0) {
+                                $isBody = true;
+                            }
+                            break;
+                        }
+
+                        if (\str_starts_with($line, 'HTTP/')) {
+                            $statusCode = \explode(' ', $line, 3)[1] ?? 0;
+                            if (!empty($statusCode)) {
+                                $response->getSwooleResponse()->status($statusCode);
+                            }
+                        } else {
+                            [ $header, $headerValue ] = \explode(': ', $line, 2);
+                            $response->getSwooleResponse()->header($header, $headerValue);
+                        }
+                    }
+
+                    if (count($lines) > 0) {
+                        $isBody = true;
+
+                        $data = \implode("\n", $lines);
+                        $data = \trim($data, "\r");
+                        if (\strlen($data) > 0) {
+                            $response->getSwooleResponse()->write($data);
+                        }
+                    }
+                };
+                \curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use ($callback) {
+                    $callback($data);
+                    return \strlen($data);
+                });
+                \curl_setopt($ch, CURLOPT_HEADER, 1);
+            }
+
             $curlHeaders = [];
             foreach ($headers as $header => $value) {
                 $curlHeaders[] = "{$header}: {$value}";
@@ -364,22 +421,29 @@ Http::wildcard()
             \curl_setopt($ch, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED);
             \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
 
-            $body = \curl_exec($ch);
+            \curl_exec($ch);
             $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $error = \curl_error($ch);
             $errNo = \curl_errno($ch);
 
             \curl_close($ch);
 
-            if ($errNo !== 0 || \is_bool($body)) {
+            if ($errNo !== 0) {
+                if ($response !== null) {
+                    $response->end();
+                }
+
                 throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
             }
 
-            return [
-                'statusCode' => $statusCode,
-                'body' => $body,
-                'headers' => $responseHeaders
-            ];
+            if ($response !== null) {
+                foreach ($responseHeaders as $key => $value) {
+                    $response->addHeader($key, $value);
+                }
+
+                $response->setStatusCode($statusCode);
+                $response->end();
+            }
         };
 
         if ($method === ADDRESSING_METHOD_BROADCAST) {
@@ -388,8 +452,7 @@ Http::wildcard()
                  * @var string $hostname
                  */
                 $hostname = $option->getState('hostname') ?? '';
-
-                $proxyRequest($hostname);
+                $proxyRequest($hostname, null);
             }
 
             $response->noContent();
@@ -404,17 +467,7 @@ Http::wildcard()
              * @var string $hostname
              */
             $hostname = $option->getState('hostname') ?? '';
-
-            $result = $proxyRequest($hostname);
-            $headers = $result['headers'];
-
-            foreach ($headers as $key => $value) {
-                $response->addHeader($key, $value);
-            }
-
-            $response
-                ->setStatusCode($result['statusCode'])
-                ->send($result['body']);
+            $proxyRequest($hostname, $response);
         }
     });
 
