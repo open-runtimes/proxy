@@ -481,7 +481,7 @@ Http::error()
         $route = $utopia->match($request);
         logError($error, "httpError", $logger, $route);
 
-        $version = Http::getEnv('OPR_PROXY_VERSION', 'UNKNOWN');
+        $version = (string) Http::getEnv('OPR_PROXY_VERSION') ?: 'UNKNOWN';
         $message = $error->getMessage();
         $file = $error->getFile();
         $line = $error->getLine();
