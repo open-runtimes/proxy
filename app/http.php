@@ -70,7 +70,7 @@ $register->set('logger', function () {
 
         $providerName = $loggingProvider->getScheme();
         $providerConfig = match ($providerName) {
-            'sentry' => ['key' => $loggingProvider->getPassword(), 'projectId' => $loggingProvider->getUser() ?? '', 'host' => $loggingProvider->getHost()],
+            'sentry' => ['key' => $loggingProvider->getPassword(), 'projectId' => $loggingProvider->getUser() ?? '', 'host' => 'https://' . $loggingProvider->getHost()],
             'logowl' => ['ticket' => $loggingProvider->getUser() ?? '', 'host' => $loggingProvider->getHost()],
             default => ['key' => $loggingProvider->getHost()],
         };
@@ -314,8 +314,6 @@ Http::wildcard()
     ->inject('response')
     ->inject('containers')
     ->action(function (Group $balancer, Request $request, SwooleResponse $response, Table $containers) {
-        throw new Exception('Intentional server error: ;-based syntax.', 500);
-
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
         $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $containers) {
