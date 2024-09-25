@@ -573,8 +573,14 @@ run(function () use ($healthCheck) {
     $defaultInterval = '10000'; // 10 seconds
     Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(false));
 
+    $payloadSize = 22 * (1024 * 1024);
+
+    $settings = [
+        'package_max_length' => $payloadSize,
+        'buffer_output_size' => $payloadSize,
+    ];
     // Start HTTP server
-    $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80')), 'UTC');
+    $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
 
     Console::success('Functions proxy is ready.');
 
