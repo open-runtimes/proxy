@@ -508,7 +508,7 @@ Http::error()
         } catch (Throwable) {
             Console::warning('Unable to send log message');
         }
-         
+
 
         $version = (string) Http::getEnv('OPR_PROXY_VERSION') ?: 'UNKNOWN';
         $message = $error->getMessage();
