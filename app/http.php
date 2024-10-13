@@ -503,7 +503,12 @@ Http::error()
     ->inject('response')
     ->action(function (Http $utopia, throwable $error, ?Logger $logger, Request $request, Response $response) {
         $route = $utopia->match($request);
-        logError($error, "httpError", $logger, $route);
+        try {
+            logError($error, "httpError", $logger, $route);
+        } catch (Throwable) {
+            Console::warning('Unable to send log message');
+        }
+         
 
         $version = (string) Http::getEnv('OPR_PROXY_VERSION') ?: 'UNKNOWN';
         $message = $error->getMessage();
