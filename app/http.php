@@ -166,7 +166,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
         $balancer3 = new Balancer($algorithm);
         $balancer3->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
-        // 3. any executor
+        // 4. any executor
         // Downtime scenario. Everything will fail, but we need to route it somewhere
         $balancer4 = new Balancer($algorithm);
 
