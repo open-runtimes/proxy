@@ -53,7 +53,7 @@ $register->set('containers', function () {
     $state = new Table($count);
     $state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
     $state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
-    $state->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
+    $state->column('state', Swoole\Table::TYPE_STRING, 65536); // State as JSON
     $state->create();
     return $state;
 });
