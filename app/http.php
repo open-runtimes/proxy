@@ -124,29 +124,15 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
     $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-    $group = new Group();
-
-    if ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
-        $algorithm = new Random();
-    }
-
-    // Cold-started-only options
-    $balancer1 = new Balancer($algorithm);
-
-    // Only online executors
-    $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+    $balancers = [];
 
     if ($method === ADDRESSING_METHOD_ANYCAST_EFFICIENT) {
-        // Only low host-cpu usage
-        $balancer1->addFilter(function ($option) {
-            /**
-             * @var array<string,mixed> $state
-             */
-            $state = \json_decode($option->getState('state', '{}'), true);
-            return ($state['usage'] ?? 100) < 80;
-        });
+        // Optimal routing considering online status, cpu usage and runtime presence
 
-        // Only low runtime-cpu usage
+        // 1. online executor with runtime present
+        // Typical execution scenario routing all requests for 1 runtime to same executor
+        $balancer1 = new Balancer($algorithm);
+        $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
         if (!empty($runtimeId)) {
             $balancer1->addFilter(function ($option) use ($runtimeId) {
                 /**
@@ -159,39 +145,73 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
                  */
                 $runtimes = $state['runtimes'];
 
-                /**
-                 * @var array<string,mixed> $runtime
-                 */
-                $runtime = $runtimes[$runtimeId] ?? [];
-
-                return ($runtime['usage'] ?? 100) < 80;
+                return \array_key_exists($runtimeId, $runtimes);
             });
         }
 
-        // Any options
+        // 2. online executors; low executor CPU usage
+        // Execution with cold-start that prefers executors with less load
         $balancer2 = new Balancer($algorithm);
         $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+        $balancer2->addFilter(function ($option) {
+            /**
+             * @var array<string,mixed> $state
+             */
+            $state = \json_decode($option->getState('state', '{}'), true);
+            return ($state['usage'] ?? 100) < 80;
+        });
+
+        // 3. online executors
+        // Execution with cold-start in case all executors are overworked
+        $balancer3 = new Balancer($algorithm);
+        $balancer3->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+
+        // 3. any executor
+        // Downtime scenario. Everything will fail, but we need to route it somewhere
+        $balancer4 = new Balancer($algorithm);
+
+        $balancers[] = $balancer1;
+        $balancers[] = $balancer2;
+        $balancers[] = $balancer3;
+        $balancers[] = $balancer4;
+    } elseif ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
+        // Best end-user performance spreading cross across all executor, causing a lot of resource usage
+        $algorithm = new Random();
+
+        // 1. online executor
+        // Typical execution scenario routing randomy between all executors
+        $balancer1 = new Balancer($algorithm);
+        $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+
+        // 2. any executor
+        // Downtime scenario. Everything will fail, but we need to route it somewhere
+        $balancer2 = new Balancer($algorithm);
+
+        $balancers[] = $balancer1;
+        $balancers[] = $balancer2;
+    } else {
+        // No special behaviour
+        $balancer1 = new Balancer($algorithm);
+        $balancers[] = $balancer1;
     }
 
     foreach ($containers as $stateItem) {
+        /**
+         * @var array<string,mixed> $stateItem
+         */
+
         if (Http::isDevelopment()) {
             Console::log("Adding balancing option: " . \json_encode($stateItem));
         }
 
-        /**
-         * @var array<string,mixed> $stateItem
-         */
-        $balancer1->addOption(new Option($stateItem));
-
-        if (isset($balancer2)) {
-            $balancer2->addOption(new Option($stateItem));
+        foreach ($balancers as $balancer) {
+            $balancer->addOption(new Option($stateItem));
         }
     }
 
-    $group->add($balancer1);
-
-    if (isset($balancer2)) {
-        $group->add($balancer2);
+    $group = new Group();
+    foreach ($balancers as $balancer) {
+        $group->add($balancer);
     }
 
     return $group;
