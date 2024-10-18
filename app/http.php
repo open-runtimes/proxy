@@ -22,11 +22,13 @@ use Utopia\Balancer\Balancer;
 use Utopia\Balancer\Group;
 use Utopia\Balancer\Option;
 use Utopia\CLI\Console;
+use Utopia\DSN\DSN;
 use Utopia\Fetch\Client;
 use Utopia\Http\Adapter\Swoole\Server;
 use Utopia\Http\Http;
 use Utopia\Http\Request;
 use Utopia\Http\Response;
+use Utopia\Http\Adapter\Swoole\Response as SwooleResponse;
 use Utopia\Http\Route;
 use Utopia\Registry\Registry;
 
@@ -56,17 +58,40 @@ $register->set('containers', function () {
     return $state;
 });
 
+/**
+ * Create logger for cloud logging
+ */
 $register->set('logger', function () {
     $providerName = Http::getEnv('OPR_PROXY_LOGGING_PROVIDER', '');
     $providerConfig = Http::getEnv('OPR_PROXY_LOGGING_CONFIG', '');
+
+    try {
+        $loggingProvider = new DSN($providerConfig ?? '');
+
+        $providerName = $loggingProvider->getScheme();
+        $providerConfig = match ($providerName) {
+            'sentry' => ['key' => $loggingProvider->getPassword(), 'projectId' => $loggingProvider->getUser() ?? '', 'host' => 'https://' . $loggingProvider->getHost()],
+            'logowl' => ['ticket' => $loggingProvider->getUser() ?? '', 'host' => $loggingProvider->getHost()],
+            default => ['key' => $loggingProvider->getHost()],
+        };
+    } catch (Throwable) {
+        $configChunks = \explode(";", ($providerConfig ?? ''));
+
+        $providerConfig = match ($providerName) {
+            'sentry' => ['key' => $configChunks[0], 'projectId' => $configChunks[1] ?? '', 'host' => '',],
+            'logowl' => ['ticket' => $configChunks[0] ?? '', 'host' => ''],
+            default => ['key' => $providerConfig],
+        };
+    }
+
     $logger = null;
 
-    if (!empty($providerName) && !empty($providerConfig) && Logger::hasProvider($providerName)) {
+    if (!empty($providerName) && is_array($providerConfig) && Logger::hasProvider($providerName)) {
         $adapter = match ($providerName) {
-            'sentry' => new Sentry($providerConfig),
-            'raygun' => new Raygun($providerConfig),
-            'logowl' => new LogOwl($providerConfig),
-            'appsignal' => new AppSignal($providerConfig),
+            'sentry' => new Sentry($providerConfig['projectId'] ?? '', $providerConfig['key'] ?? '', $providerConfig['host'] ?? ''),
+            'logowl' => new LogOwl($providerConfig['ticket'] ?? '', $providerConfig['host'] ?? ''),
+            'raygun' => new Raygun($providerConfig['key'] ?? ''),
+            'appsignal' => new AppSignal($providerConfig['key'] ?? ''),
             default => throw new Exception('Provider "' . $providerName . '" not supported.')
         };
 
@@ -99,29 +124,15 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
     $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-    $group = new Group();
-
-    if ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
-        $algorithm = new Random();
-    }
-
-    // Cold-started-only options
-    $balancer1 = new Balancer($algorithm);
-
-    // Only online executors
-    $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+    $balancers = [];
 
     if ($method === ADDRESSING_METHOD_ANYCAST_EFFICIENT) {
-        // Only low host-cpu usage
-        $balancer1->addFilter(function ($option) {
-            /**
-             * @var array<string,mixed> $state
-             */
-            $state = \json_decode($option->getState('state', '{}'), true);
-            return ($state['usage'] ?? 100) < 80;
-        });
+        // Optimal routing considering online status, cpu usage and runtime presence
 
-        // Only low runtime-cpu usage
+        // 1. online executor with runtime present
+        // Typical execution scenario routing all requests for 1 runtime to same executor
+        $balancer1 = new Balancer($algorithm);
+        $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
         if (!empty($runtimeId)) {
             $balancer1->addFilter(function ($option) use ($runtimeId) {
                 /**
@@ -134,39 +145,73 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
                  */
                 $runtimes = $state['runtimes'];
 
-                /**
-                 * @var array<string,mixed> $runtime
-                 */
-                $runtime = $runtimes[$runtimeId] ?? [];
-
-                return ($runtime['usage'] ?? 100) < 80;
+                return \array_key_exists($runtimeId, $runtimes);
             });
         }
 
-        // Any options
+        // 2. online executors; low executor CPU usage
+        // Execution with cold-start that prefers executors with less load
         $balancer2 = new Balancer($algorithm);
         $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+        $balancer2->addFilter(function ($option) {
+            /**
+             * @var array<string,mixed> $state
+             */
+            $state = \json_decode($option->getState('state', '{}'), true);
+            return ($state['usage'] ?? 100) < 80;
+        });
+
+        // 3. online executors
+        // Execution with cold-start in case all executors are overworked
+        $balancer3 = new Balancer($algorithm);
+        $balancer3->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+
+        // 4. any executor
+        // Downtime scenario. Everything will fail, but we need to route it somewhere
+        $balancer4 = new Balancer($algorithm);
+
+        $balancers[] = $balancer1;
+        $balancers[] = $balancer2;
+        $balancers[] = $balancer3;
+        $balancers[] = $balancer4;
+    } elseif ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
+        // Best end-user performance spreading cross across all executor, causing a lot of resource usage
+        $algorithm = new Random();
+
+        // 1. online executor
+        // Typical execution scenario routing randomy between all executors
+        $balancer1 = new Balancer($algorithm);
+        $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+
+        // 2. any executor
+        // Downtime scenario. Everything will fail, but we need to route it somewhere
+        $balancer2 = new Balancer($algorithm);
+
+        $balancers[] = $balancer1;
+        $balancers[] = $balancer2;
+    } else {
+        // No special behaviour
+        $balancer1 = new Balancer($algorithm);
+        $balancers[] = $balancer1;
     }
 
     foreach ($containers as $stateItem) {
+        /**
+         * @var array<string,mixed> $stateItem
+         */
+
         if (Http::isDevelopment()) {
             Console::log("Adding balancing option: " . \json_encode($stateItem));
         }
 
-        /**
-         * @var array<string,mixed> $stateItem
-         */
-        $balancer1->addOption(new Option($stateItem));
-
-        if (isset($balancer2)) {
-            $balancer2->addOption(new Option($stateItem));
+        foreach ($balancers as $balancer) {
+            $balancer->addOption(new Option($stateItem));
         }
     }
 
-    $group->add($balancer1);
-
-    if (isset($balancer2)) {
-        $group->add($balancer2);
+    $group = new Group();
+    foreach ($balancers as $balancer) {
+        $group->add($balancer);
     }
 
     return $group;
@@ -204,7 +249,7 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
                 $message = $node->getState()['message'] ?? 'Unexpected error.';
                 $message = 'Executor "' . $node->getHostname() . '" went offline: ' . $message;
                 $error = new Exception($message, 500);
-                logError($error, "helathChekError", $logger, null);
+                logError($error, "healthCheckError", $logger, null);
             }
         }
 
@@ -220,7 +265,11 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
     }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
-        Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
+        try {
+            Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
+        } catch (\Throwable $th) {
+            logError($th, 'healthCheckError', $logger, null);
+        }
     }
 };
 
@@ -284,10 +333,10 @@ Http::wildcard()
     ->inject('request')
     ->inject('response')
     ->inject('containers')
-    ->action(function (Group $balancer, Request $request, Response $response, Table $containers) {
+    ->action(function (Group $balancer, Request $request, SwooleResponse $response, Table $containers) {
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        $proxyRequest = function (string $hostname) use ($request, $containers) {
+        $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $containers) {
             if (Http::isDevelopment()) {
                 Console::info("Executing on " . $hostname);
             }
@@ -352,6 +401,62 @@ Http::wildcard()
             \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
             \curl_setopt($ch, CURLOPT_TIMEOUT, \intval(Http::getEnv('OPR_PROXY_MAX_TIMEOUT', '900')));
 
+            // Chunked response support
+            $isChunked = false;
+            if ($response !== null) {
+                $isBody = false;
+                $callback = function ($data) use (&$isChunked, $response, &$isBody) {
+                    $isChunked = true;
+
+                    if ($isBody) {
+                        $response->getSwooleResponse()->write($data);
+                        return;
+                    }
+
+                    $lines = \explode("\n", $data);
+
+                    $index = -1;
+                    while (count($lines) > 0) {
+                        $index++;
+
+                        $line = \array_shift($lines);
+                        $line = \trim($line, "\r");
+
+                        if (empty($line)) {
+                            if ($index === 0) {
+                                $isBody = true;
+                            }
+                            break;
+                        }
+
+                        if (\str_starts_with($line, 'HTTP/')) {
+                            $statusCode = \explode(' ', $line, 3)[1] ?? 0;
+                            if (!empty($statusCode)) {
+                                $response->getSwooleResponse()->status($statusCode);
+                            }
+                        } else {
+                            [ $header, $headerValue ] = \explode(': ', $line, 2);
+                            $response->getSwooleResponse()->header($header, $headerValue);
+                        }
+                    }
+
+                    if (count($lines) > 0) {
+                        $isBody = true;
+
+                        $data = \implode("\n", $lines);
+                        $data = \trim($data, "\r");
+                        if (\strlen($data) > 0) {
+                            $response->getSwooleResponse()->write($data);
+                        }
+                    }
+                };
+                \curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use ($callback) {
+                    $callback($data);
+                    return \strlen($data);
+                });
+                \curl_setopt($ch, CURLOPT_HEADER, 1);
+            }
+
             $curlHeaders = [];
             foreach ($headers as $header => $value) {
                 $curlHeaders[] = "{$header}: {$value}";
@@ -360,22 +465,29 @@ Http::wildcard()
             \curl_setopt($ch, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED);
             \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
 
-            $body = \curl_exec($ch);
+            \curl_exec($ch);
             $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $error = \curl_error($ch);
             $errNo = \curl_errno($ch);
 
             \curl_close($ch);
 
-            if ($errNo !== 0 || \is_bool($body)) {
+            if ($errNo !== 0) {
+                if ($response !== null) {
+                    $response->end();
+                }
+
                 throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
             }
 
-            return [
-                'statusCode' => $statusCode,
-                'body' => $body,
-                'headers' => $responseHeaders
-            ];
+            if ($response !== null) {
+                foreach ($responseHeaders as $key => $value) {
+                    $response->addHeader($key, $value);
+                }
+
+                $response->setStatusCode($statusCode);
+                $response->end();
+            }
         };
 
         if ($method === ADDRESSING_METHOD_BROADCAST) {
@@ -384,8 +496,7 @@ Http::wildcard()
                  * @var string $hostname
                  */
                 $hostname = $option->getState('hostname') ?? '';
-
-                $proxyRequest($hostname);
+                $proxyRequest($hostname, null);
             }
 
             $response->noContent();
@@ -400,17 +511,7 @@ Http::wildcard()
              * @var string $hostname
              */
             $hostname = $option->getState('hostname') ?? '';
-
-            $result = $proxyRequest($hostname);
-            $headers = $result['headers'];
-
-            foreach ($headers as $key => $value) {
-                $response->addHeader($key, $value);
-            }
-
-            $response
-                ->setStatusCode($result['statusCode'])
-                ->send($result['body']);
+            $proxyRequest($hostname, $response);
         }
     });
 
@@ -422,7 +523,18 @@ Http::error()
     ->inject('response')
     ->action(function (Http $utopia, throwable $error, ?Logger $logger, Request $request, Response $response) {
         $route = $utopia->match($request);
-        logError($error, "httpError", $logger, $route);
+        try {
+            logError($error, "httpError", $logger, $route);
+        } catch (Throwable) {
+            Console::warning('Unable to send log message');
+        }
+
+
+        $version = (string) Http::getEnv('OPR_PROXY_VERSION') ?: 'UNKNOWN';
+        $message = $error->getMessage();
+        $file = $error->getFile();
+        $line = $error->getLine();
+        $trace = $error->getTrace();
 
         switch ($error->getCode()) {
             case 400: // Error allowed publicly
@@ -443,20 +555,24 @@ Http::error()
                 $code = 500; // All other errors get the generic 500 server error status code
         }
 
-        $output = [
-            'message' => $error->getMessage(),
-            'code' => $error->getCode(),
-            'file' => $error->getFile(),
-            'line' => $error->getLine(),
-            'trace' => $error->getTrace(),
-            'version' => Http::getEnv('OPR_PROXY_VERSION', 'UNKNOWN')
+        $output = ((Http::isDevelopment())) ? [
+            'message' => $message,
+            'code' => $code,
+            'file' => $file,
+            'line' => $line,
+            'trace' => \json_encode($trace, JSON_UNESCAPED_UNICODE) === false ? [] : $trace, // check for failing encode
+            'version' => $version
+        ] : [
+            'message' => $message,
+            'code' => $code,
+            'version' => $version
         ];
 
         $response
             ->addHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
             ->addHeader('Expires', '0')
             ->addHeader('Pragma', 'no-cache')
-            ->setStatusCode(\intval($code));
+            ->setStatusCode($code);
 
         $response->json($output);
     });
@@ -482,8 +598,14 @@ run(function () use ($healthCheck) {
     $defaultInterval = '10000'; // 10 seconds
     Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(false));
 
+    $payloadSize = 22 * (1024 * 1024);
+
+    $settings = [
+        'package_max_length' => $payloadSize,
+        'buffer_output_size' => $payloadSize,
+    ];
     // Start HTTP server
-    $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80')), 'UTC');
+    $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
 
     Console::success('Functions proxy is ready.');
 
