@@ -144,8 +144,8 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
                  * @var array<string,mixed> $runtimes
                  */
                 $runtimes = $state['runtimes'] ?? [];
-                if (!\is_array($runtimes)) {
-                    Console::error('Invalid runtimes state: ' . \json_encode($runtimes, JSON_PRETTY_PRINT));
+                if (!\is_array($state['runtimes'])) {
+                    Console::error('Invalid runtimes state: ' . \json_encode($state['runtimes'], JSON_PRETTY_PRINT));
                 }
 
                 return \array_key_exists($runtimeId, $runtimes);
