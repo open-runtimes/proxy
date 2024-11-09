@@ -137,31 +137,14 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     if ($method === ADDRESSING_METHOD_ANYCAST_EFFICIENT) {
         // Only low host-cpu usage
         $balancer1->addFilter(function ($option) {
-            /**
-             * @var array<string,mixed> $state
-             */
-            $state = \json_decode($option->getState('state', '{}'), true);
-            return ($state['usage'] ?? 100) < 80;
+            return ($option->getState('usage', 100)) < 80;
         });
-
+        
         // Only low runtime-cpu usage
         if (!empty($runtimeId)) {
             $balancer1->addFilter(function ($option) use ($runtimeId) {
-                /**
-                 * @var array<string,mixed> $state
-                 */
-                $state = \json_decode($option->getState('state', '{}'), true);
-
-                /**
-                 * @var array<string,mixed> $runtimes
-                 */
-                $runtimes = $state['runtimes'];
-
-                /**
-                 * @var array<string,mixed> $runtime
-                 */
+                $runtimes = $option->getState('runtimes', []);
                 $runtime = $runtimes[$runtimeId] ?? [];
-
                 return ($runtime['usage'] ?? 100) < 80;
             });
         }
@@ -170,14 +153,13 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
         $balancer2 = new Balancer($algorithm);
         $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
     }
-    foreach ($state->listExecutors() as $executorHostname => $executor) {
-        $executor['runtimes'] = $state->listRuntimes($executorHostname);
-        $executor['hostname'] = $executorHostname;
+    foreach ($state->listExecutors() as $hostname => $executor) {
+        $executor['runtimes'] = $state->listRuntimes($hostname);
+        $executor['hostname'] = $hostname;
 
         if (Http::isDevelopment()) {
             Console::log("Adding balancing option: " . \json_encode($executor));
         }
-
 
         $balancer1->addOption(new Option($executor));
         if (isset($balancer2)) {
@@ -192,7 +174,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     }
 
     return $group;
-}, ['algorithm', 'request', 'state', 'executors']);
+}, ['algorithm', 'request', 'state']);
 
 $healthCheck = function (bool $forceShowError = false) use ($register): void {
     /** @var State $state */
@@ -201,47 +183,47 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
     $executors = $state->listExecutors();
 
     $health = new Health();
-    foreach (\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')) as $executorHostname) {
-        $health->addNode(new Node($executorHostname));
+    foreach (\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')) as $hostname) {
+        $health->addNode(new Node($hostname));
     }
 
     $healthy = true;
     foreach ($health->run()->getNodes() as $node) {
-        $executorHostname = $node->getHostname();
-        $executor = $executors[$executorHostname] ?? [];
+        $hostname = $node->getHostname();
+        $executor = $executors[$hostname] ?? [];
 
-        if ($node->isOnline() && $forceShowError && $executor['status'] !== 'online') {
+        if ($node->isOnline() && $forceShowError && ($executor['status'] ?? '') !== 'online') {
             Console::success('Executor "' . $node->getHostname() . '" went online.');
         } 
 
         if (!$node->isOnline()) {
             $healthy = false;
 
-            if ($forceShowError && $executor['status'] !== 'offline') {
+            if ($forceShowError && ($executor['status'] ?? '') === 'online') {
                 $error = new Exception('Executor "' . $node->getHostname() . '" went offline: ' . $node->getState()['message'] ?? 'Unexpected error.', 500);
                 logError($error, "healthCheckError", $logger, null);
             }
         }
 
         $state->saveExecutor(
-            $executorHostname, 
+            $hostname, 
             status: $node->isOnline() ? 'online' : 'offline', 
             usage: $node->getState()['usage'] ?? 0
         );
 
         $runtimes = [];
         foreach ($node->getState()['runtimes'] ?? [] as $runtimeId => $runtime) {
-            $runtimesState[$runtimeId] = [
+            $runtimes[$runtimeId] = [
                 'status' => $runtime['status'] ?? 'offline',
                 'usage' => $runtime['usage'] ?? 0,
             ];
         }
-        $state->saveRuntimes($executorHostname, $runtimes);
+        $state->saveRuntimes($hostname, $runtimes);
     }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
         try {
-            Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
+            Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', ''));
         } catch (\Throwable $th) {
             logError($th, 'healthCheckError', $logger, null);
         }
@@ -311,16 +293,16 @@ Http::wildcard()
     ->action(function (Group $balancer, Request $request, SwooleResponse $response, State $state) {
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        $proxyRequest = function (string $executorHostname, ?SwooleResponse $response = null) use ($request, $state) {
+        $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $state) {
             if (Http::isDevelopment()) {
-                Console::info("Executing on " . $executorHostname);
+                Console::info("Executing on " . $hostname);
             }
 
             // Optimistic update. Mark runtime up instantly to prevent race conditions
             // Next health check with confirm it started well, and update usage stats
             $runtimeId = $request->getHeader('x-opr-runtime-id', '');
             if (!empty($runtimeId)) {
-                $state->saveRuntime($executorHostname, $runtimeId, 'pass', 0);
+                $state->saveRuntime($hostname, $runtimeId, 'pass', 0);
             }
 
             $headers = \array_merge($request->getHeaders(), [
@@ -329,7 +311,7 @@ Http::wildcard()
 
             // Header used for testing
             if (Http::isDevelopment()) {
-                $headers['x-opr-executor-hostname'] = $executorHostname;
+                $headers['x-opr-executor-hostname'] = $hostname;
             }
 
             $body = $request->getRawPayload();
@@ -338,7 +320,7 @@ Http::wildcard()
 
             $responseHeaders = [];
 
-            \curl_setopt($ch, CURLOPT_URL, $executorHostname . $request->getURI());
+            \curl_setopt($ch, CURLOPT_URL, $hostname . $request->getURI());
             \curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
             \curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
             \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -433,7 +415,7 @@ Http::wildcard()
                     $response->end();
                 }
 
-                throw new Exception('Unexpected curl error between proxy and executor ID ' . $executorHostname . ' (' . $errNo .  '): ' . $error);
+                throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
             }
 
             if ($response !== null) {
@@ -535,15 +517,15 @@ Http::error()
 
 // If no health check, mark all as online
 if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
-    $executorHostnames = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
+    $hostnames = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
 
     /**
      * @var State $state
      */
-    $containers = $register->get('state');
+    $state = $register->get('state');
 
-    foreach ($executorHostnames as $executorHostname) {
-        $state->saveExecutor($executorHostname, 'online', 0);
+    foreach ($hostnames as $hostname) {
+        $state->saveExecutor($hostname, 'online', 0);
     }
 }
 
