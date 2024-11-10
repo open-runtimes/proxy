@@ -10,7 +10,7 @@ RUN composer install --ignore-platform-reqs --optimize-autoloader \
     --no-plugins --no-scripts --prefer-dist
 
 # Proxy
-FROM openruntimes/base:0.1.0 as final
+FROM appwrite/base:0.9.3 AS final
 
 ARG OPR_PROXY_VERSION
 ENV OPR_PROXY_VERSION=$OPR_PROXY_VERSION
