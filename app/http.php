@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use OpenRuntimes\State\Adapter\Redis as RedisAdapter;
+use OpenRuntimes\State\Adapter\RedisCluster as RedisAdapter;
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
 use OpenRuntimes\State\State;
@@ -53,8 +53,7 @@ Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION)
 $register = new Registry();
 
 $register->set('state', function () {
-    $redis = new Redis();
-    $redis->connect('redis', 6379);
+    $redis = new RedisCluster(null, ['redis-cluster-0:6379', 'redis-cluster-1:6379', 'redis-cluster-2:6379']);
     return new State(new RedisAdapter($redis));
 });
 
