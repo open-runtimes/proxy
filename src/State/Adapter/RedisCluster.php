@@ -48,7 +48,7 @@ class RedisCluster implements Adapter
      * @param  array<string,string>  $entries
      * @param  string  $hash
      *
-     * @return bool|array<string,string>
+     * @return bool
      */
     public function saveAll(array $entries, string $hash): bool|array
     {
@@ -57,9 +57,11 @@ class RedisCluster implements Adapter
         }
 
         try {
+            $this->redis->multi();
+            $this->redis->del($hash);
             $this->redis->hMSet($hash, $entries);
+            $this->redis->exec();
 
-            return $entries;
         } catch (Throwable $th) {
             return false;
         }

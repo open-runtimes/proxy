@@ -154,11 +154,12 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     }
     foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
         $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname);
-        $executor['hostname'] = $hostname;
 
         if (Http::isDevelopment()) {
-            Console::log("Adding balancing option: " . \json_encode($executor));
+            Console::log("Updated balancing option '" . $hostname . "' with ". \count($executor['runtimes'] ?? [])." runtimes: " . \json_encode($executor));
         }
+
+        $executor['hostname'] = $hostname;
 
         $balancer1->addOption(new Option($executor));
         if (isset($balancer2)) {
@@ -213,6 +214,7 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
 
         $runtimes = [];
 
+        Console::log('Executor "' . $hostname . '" healthcheck returned ' . \count($node->getState()['runtimes'] ?? []) . ' runtimes');
         foreach ($node->getState()['runtimes'] ?? [] as $runtimeId => $runtime) {
             if (!\is_string($runtimeId) || !\is_array($runtime)) {
                 Console::warning('Invalid runtime data for ' . $hostname . ' runtime ' . $runtimeId);

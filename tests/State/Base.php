@@ -81,16 +81,29 @@ abstract class Base extends TestCase
             ],
         ];
 
-        $data = self::$state->saveAll($resource, $entries);
-        $this->assertEquals(true, $data);
+        $result = self::$state->saveAll($resource, $entries);
+        $this->assertEquals(true, $result);
 
         $this->assertEquals($entries, self::$state->list($resource));
 
         // test updating
         $entries[$nameOne]['status'] = 'offline';
 
-        $data = self::$state->saveAll($resource, $entries);
-        $this->assertEquals(true, $data);
+        $result = self::$state->saveAll($resource, $entries);
+        $this->assertEquals(true, $result);
+
+        $this->assertEquals($entries, self::$state->list($resource));
+
+        // test replace
+        $entries = [
+            $nameOne => [
+                'status' => 'online',
+                'usage' => 100,
+            ],
+        ]; 
+
+        $result = self::$state->saveAll($resource, $entries);
+        $this->assertEquals(true, $result);
 
         $this->assertEquals($entries, self::$state->list($resource));
     }

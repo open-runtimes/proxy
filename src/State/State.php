@@ -86,12 +86,10 @@ class State
             ], JSON_THROW_ON_ERROR);
         }
 
-        $this->adapter->saveAll(
+        return $this->adapter->saveAll(
             entries: $strings,
             hash: $resource
         );
-
-        return true;
     }
 
     /**

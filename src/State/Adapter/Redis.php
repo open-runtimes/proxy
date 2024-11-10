@@ -48,7 +48,7 @@ class Redis implements Adapter
      * @param  array<string,string>  $entries
      * @param  string  $hash
      *
-     * @return bool|array<string,string>
+     * @return bool
      */
     public function saveAll(array $entries, string $hash): bool|array
     {
@@ -57,9 +57,12 @@ class Redis implements Adapter
         }
 
         try {
+            $this->redis->multi();
+            $this->redis->del($hash);
             $this->redis->hMSet($hash, $entries);
+            $this->redis->exec();
 
-            return $entries;
+            return true;
         } catch (Throwable $th) {
             return false;
         }
