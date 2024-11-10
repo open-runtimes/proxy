@@ -62,7 +62,7 @@ abstract class Base extends TestCase
         ], self::$state->list($resource));
     }
 
-    public function testSaveAll(): void 
+    public function testSaveAll(): void
     {
         $resource = uniqid();
 

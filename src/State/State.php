@@ -45,7 +45,7 @@ class State
      * Get all executors status
      *
      * @param string  $resource
-     * 
+     *
      * @return array<string, array<string, mixed>>
      */
     public function list(string $resource): array
