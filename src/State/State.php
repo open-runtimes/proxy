@@ -4,9 +4,6 @@ namespace OpenRuntimes\State;
 
 class State
 {
-    public const HASH_KEY_EXECUTOR = 'executor';
-    public const HASH_KEY_EXECUTOR_RUNTIMES = 'executor-runtimes';
-
     /**
      * @var Adapter
      */
@@ -23,21 +20,24 @@ class State
     /**
      * Save executor status
      *
-     * @param  string  $hostname
+     * @param  string  $resource
+     * @param  string  $name
      * @param  string  $status
      * @param  int     $usage
      *
      * @return bool
      */
-    public function saveExecutor(string $hostname, string $status, int $usage): bool
+    public function save(string $resource, string $name, string $status, int $usage): bool
     {
+        $string = json_encode([
+            'status' => $status,
+            'usage' => $usage,
+        ], JSON_THROW_ON_ERROR);
+
         $this->adapter->save(
-            key: $hostname,
-            data: json_encode([
-                'status' => $status,
-                'usage' => $usage,
-            ], JSON_THROW_ON_ERROR),
-            hash: State::HASH_KEY_EXECUTOR
+            key: $name,
+            data: json_encode($string, JSON_THROW_ON_ERROR),
+            hash: $resource
         );
 
         return true;
@@ -46,81 +46,51 @@ class State
     /**
      * Get all executors status
      *
-     * @return array<string, mixed>
+     * @param string  $resource
+     * 
+     * @return array<string, array<string, mixed>>
      */
-    public function listExecutors(): array
+    public function list($resource): array
     {
-        $runtimes = $this->adapter->getAll(State::HASH_KEY_EXECUTOR);
+        $entries = $this->adapter->getAll($resource);
 
         $objects = [];
-        foreach ($runtimes as $key => $value) {
-            $objects[$key] = json_decode($value, true);
+        foreach ($entries as $key => $value) {
+            $json = json_decode($value, true, 2, JSON_THROW_ON_ERROR);
+            $objects[$key] = [
+                'status' => $json['status'] ?? null,
+                'usage' => $json['usage'] ?? 0,
+            ];
         }
 
         return $objects;
     }
 
     /**
-     * Get all runtimes by executor instance
+     * Save multiple entries
      *
-     * @param  string  $hostname
-     *
-     * @return array<string, mixed>
-     */
-    public function listRuntimes(string $hostname): array
-    {
-        $runtimes = $this->adapter->getAll(State::HASH_KEY_EXECUTOR_RUNTIMES . ':' . $hostname);
-
-        $objects = [];
-        foreach ($runtimes as $key => $value) {
-            $objects[$key] = json_decode($value, true);
-        }
-
-        return $objects;
-    }
-
-    /**
-     * Save runtime status
-     *
-     * @param  string  $hostname
-     * @param  string  $runtimeId
-     * @param  string  $status
-     * @param  int     $usage
+     * @param  string  $resource
+     * @param  array<string, array<string, mixed>>  $entries
      *
      * @return bool
      */
-    public function saveRuntime(string $hostname, string $runtimeId, string $status, int $usage): bool
-    {
-        $this->adapter->save(
-            key: $runtimeId,
-            data: json_encode([
-                'status' => $status,
-                'usage' => $usage
-            ], JSON_THROW_ON_ERROR),
-            hash: State::HASH_KEY_EXECUTOR_RUNTIMES . ':' . $hostname
-        );
-
-        return true;
-    }
-
-    /**
-     * Save multiple runtimes
-     *
-     * @param  string  $hostname
-     * @param  array<string, array<string, mixed>>  $runtimes
-     *
-     * @return bool
-     */
-    public function saveRuntimes(string $hostname, array $runtimes): bool
+    public function saveAll(string $resource, array $entries): bool
     {
         $strings = [];
-        foreach ($runtimes as $key => $value) {
-            $strings[$key] = json_encode($value, JSON_THROW_ON_ERROR);
+        foreach ($entries as $key => $value) {
+            if (!isset($value['status'], $value['usage'])) {
+                continue;
+            }
+
+            $strings[$key] = json_encode([
+                'status' => $value['status'],
+                'usage' => $value['usage'],
+            ], JSON_THROW_ON_ERROR);
         }
 
         $this->adapter->saveAll(
             entries: $strings,
-            hash: State::HASH_KEY_EXECUTOR_RUNTIMES . ':' . $hostname
+            hash: $resource
         );
 
         return true;

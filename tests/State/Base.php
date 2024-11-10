@@ -17,96 +17,123 @@ abstract class Base extends TestCase
         self::$state->flush();
     }
 
-    public function testSaveExecutor(): void
+    public function testSave(): void
     {
-        $hostname = uniqid('executor', true);
-        $executor = self::$state->saveExecutor($hostname, 'online', 100);
+        // test saving
+        $hostname = uniqid();
+        $executor = self::$state->save('executor', $hostname, 'online', 100);
 
         $this->assertEquals(true, $executor);
 
-        $executor = self::$state->saveExecutor($hostname, 'offline', 0);
-        $this->assertEquals(true, $executor);
-    }
-
-    public function testListExecutors(): void
-    {
-        $hostname = uniqid('executor', true);
-        $executor = self::$state->saveExecutor($hostname, 'online', 100);
-
-        $this->assertEquals(true, $executor);
-
-        $executors = self::$state->listExecutors();
-
-        $this->assertIsArray($executors);
-        $expectedKey = 'executor.runtimes:' . $hostname;
-        $this->assertArrayHasKey($expectedKey, $executors);
-        $this->assertArrayHasKey('status', $executors[$expectedKey]);
-        $this->assertArrayHasKey('usage', $executors[$expectedKey]);
-        $this->assertEquals('online', $executors[$expectedKey]['status']);
-        $this->assertEquals(100, $executors[$expectedKey]['usage']);
-    }
-
-    public function testSaveRuntime(): void
-    {
-        $hostname = uniqid('executor', true);
-        $runtimeId = uniqid('runtime', true);
-
-        $data = self::$state->saveRuntime($hostname, $runtimeId, 'online', 100);
-        $this->assertEquals(true, $data);
-
-        $data = self::$state->saveRuntime($hostname, $runtimeId, 'offline', 0);
-        $this->assertEquals(true, $data);
-    }
-
-    public function testSaveRuntimes(): void
-    {
-        $hostname = uniqid('executor', true);
-
-        $runtimeIdOne = uniqid('runtime', true);
-        $runtimeIdTwo = uniqid('runtime', true);
-
-        $data = self::$state->saveRuntimes($hostname, [
-            $runtimeIdOne => [
+        $this->assertEquals([
+            $hostname => [
                 'status' => 'online',
                 'usage' => 100,
             ],
-            $runtimeIdTwo => [
+        ], self::$state->list('executor'));
+
+        // test updating
+        $executor = self::$state->save('executor', $hostname, 'offline', 0);
+        $this->assertEquals(true, $executor);
+
+        $this->assertEquals([
+            $hostname => [
                 'status' => 'offline',
                 'usage' => 0,
             ],
-        ]);
-        $this->assertEquals(true, $data);
+        ], self::$state->list('executor'));
 
-        $runtimes = self::$state->listRuntimes($hostname);
+        // test adding
+        $hostnameTwo = uniqid('executor', true);
+        $executor = self::$state->save('executor', $hostnameTwo, 'online', 95);
 
-        $this->assertIsArray($runtimes);
-        $this->assertCount(2, $runtimes);
-        $this->assertArrayHasKey($runtimeIdOne, $runtimes);
-        $this->assertArrayHasKey($runtimeIdTwo, $runtimes);
-        $this->assertArrayHasKey('status', $runtimes[$runtimeIdOne]);
-        $this->assertArrayHasKey('usage', $runtimes[$runtimeIdOne]);
-        $this->assertEquals('online', $runtimes[$runtimeIdOne]['status']);
-        $this->assertEquals(100, $runtimes[$runtimeIdOne]['usage']);
-        $this->assertEquals('offline', $runtimes[$runtimeIdTwo]['status']);
-        $this->assertEquals(0, $runtimes[$runtimeIdTwo]['usage']);
+        $this->assertEquals(true, $executor);
+
+        $this->assertEquals([
+            $hostname => [
+                'status' => 'offline',
+                'usage' => 100,
+            ],
+            $hostnameTwo => [
+                'status' => 'online',
+                'usage' => 95,
+            ],
+        ], self::$state->list('executor'));
     }
 
-    public function testListRuntimes(): void
+    public function testSaveAll(): void 
     {
-        $hostname = uniqid('executor', true);
-        $runtimeId = uniqid('runtime', true);
+        // test saving
+        $hostnameOne = uniqid();
+        $hostnameTwo = uniqid();
 
-        $data = self::$state->saveRuntime($hostname, $runtimeId, 'online', 100);
+        $entries = [
+            $hostnameOne => [
+                'status' => 'online',
+                'usage' => 100,
+            ],
+            $hostnameTwo => [
+                'status' => 'offline',
+                'usage' => 0,
+            ],
+        ];
+
+        $data = self::$state->saveAll('executor', $entries);
         $this->assertEquals(true, $data);
 
-        $runtimes = self::$state->listRuntimes($hostname);
+        $this->assertEquals($entries, self::$state->list('executor'));
 
-        $this->assertIsArray($runtimes);
-        $this->assertCount(1, $runtimes);
-        $this->assertArrayHasKey($runtimeId, $runtimes);
-        $this->assertArrayHasKey('status', $runtimes[$runtimeId]);
-        $this->assertArrayHasKey('usage', $runtimes[$runtimeId]);
-        $this->assertEquals('online', $runtimes[$runtimeId]['status']);
-        $this->assertEquals(100, $runtimes[$runtimeId]['usage']);
+        // test updating
+        $entries[$hostnameOne]['status'] = 'offline';
+
+        $data = self::$state->saveAll('executor', $entries);
+        $this->assertEquals(true, $data);
+
+        $this->assertEquals($entries, self::$state->list('executor'));
+    }
+
+    public function testNestedResource(): void
+    {
+        // test saving
+        $hostname = uniqid();
+        $runtimeId = uniqid();
+
+        $data = self::$state->save('executor:' . $hostname, $runtimeId, 'online', 100);
+        $this->assertEquals(true, $data);
+
+        $this->assertEquals([
+            $runtimeId => [
+                'status' => 'online',
+                'usage' => 100,
+            ],
+        ], self::$state->list('executor:' . $hostname));
+
+        // test updating
+        $data = self::$state->save('executor:' . $hostname, $runtimeId, 'offline', 0);
+        $this->assertEquals(true, $data);
+
+        $this->assertEquals([
+            $runtimeId => [
+                'status' => 'offline',
+                'usage' => 0,
+            ],
+        ], self::$state->list('executor:' . $hostname));
+
+        $runtimeIdTwo = uniqid();
+
+        $data = self::$state->save('executor:' . $hostname, $runtimeIdTwo, 'online', 95);
+
+        $this->assertEquals(true, $data);
+
+        $this->assertEquals([
+            $runtimeId => [
+                'status' => 'offline',
+                'usage' => 0,
+            ],
+            $runtimeIdTwo => [
+                'status' => 'online',
+                'usage' => 95,
+            ],
+        ], self::$state->list('executor:' . $hostname));
     }
 }

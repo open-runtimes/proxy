@@ -42,6 +42,9 @@ const ADDRESSING_METHOD_ANYCAST_EFFICIENT = 'anycast-efficient';
 const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
 const ADDRESSING_METHOD_BROADCAST = 'broadcast';
 
+const RESOURCE_EXECUTORS = 'executors';
+const RESOURCE_RUNTIMES = 'executors-runtimes:';
+
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
 Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION));
@@ -153,8 +156,8 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
         $balancer2 = new Balancer($algorithm);
         $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
     }
-    foreach ($state->listExecutors() as $hostname => $executor) {
-        $executor['runtimes'] = $state->listRuntimes($hostname);
+    foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
+        $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname);
         $executor['hostname'] = $hostname;
 
         if (Http::isDevelopment()) {
@@ -180,7 +183,7 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
     /** @var State $state */
     $state = $register->get('state');
     $logger = $register->get('logger');
-    $executors = $state->listExecutors();
+    $executors = $state->list(RESOURCE_EXECUTORS);
 
     $health = new Health();
     foreach (\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')) as $hostname) {
@@ -205,8 +208,9 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
             }
         }
 
-        $state->saveExecutor(
-            $hostname,
+        $state->save(
+            resource: RESOURCE_EXECUTORS,
+            name: $hostname,
             status: $node->isOnline() ? 'online' : 'offline',
             usage: $node->getState()['usage'] ?? 0
         );
@@ -224,7 +228,7 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
                 'usage' => $runtime['usage'] ?? 0,
             ];
         }
-        $state->saveRuntimes($hostname, $runtimes);
+        $state->saveAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
     }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
@@ -308,7 +312,7 @@ Http::wildcard()
             // Next health check with confirm it started well, and update usage stats
             $runtimeId = $request->getHeader('x-opr-runtime-id', '');
             if (!empty($runtimeId)) {
-                $state->saveRuntime($hostname, $runtimeId, 'pass', 0);
+                $state->save(RESOURCE_RUNTIMES . $hostname, $runtimeId, 'pass', 0);
             }
 
             $headers = \array_merge($request->getHeaders(), [
@@ -531,7 +535,7 @@ if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
     $state = $register->get('state');
 
     foreach ($hostnames as $hostname) {
-        $state->saveExecutor($hostname, 'online', 0);
+        $state->save(RESOURCE_EXECUTORS, $hostname, 'online', 0);
     }
 }
 
