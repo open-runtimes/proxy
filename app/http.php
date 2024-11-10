@@ -52,11 +52,6 @@ Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION)
 // Setup Registry
 $register = new Registry();
 
-$register->set('state', function () {
-    $redis = new RedisCluster(null, ['redis-cluster-0:6379', 'redis-cluster-1:6379', 'redis-cluster-2:6379']);
-    return new State(new RedisAdapter($redis));
-});
-
 /**
  * Create logger for cloud logging
  */
@@ -116,8 +111,10 @@ $register->set('algorithm', function () {
 // Setup Resources
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
-Http::setResource('state', fn () => $register->get('state'));
-Http::setResource('executors', fn () => \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')));
+Http::setResource('state', function () {
+    $redis = new RedisCluster(null, ['redis-cluster-0:6379', 'redis-cluster-1:6379', 'redis-cluster-2:6379']);
+    return new State(new RedisAdapter($redis));
+});
 
 // Balancer must NOT be registry. This has to run on every request
 Http::setResource('balancer', function (Algorithm $algorithm, Request $request, State $state) {
@@ -178,9 +175,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     return $group;
 }, ['algorithm', 'request', 'state']);
 
-$healthCheck = function (bool $forceShowError = false) use ($register): void {
-    /** @var State $state */
-    $state = $register->get('state');
+$healthCheck = function (State $state, bool $firstCheck = false, ) use ($register): void {
     $logger = $register->get('logger');
     $executors = $state->list(RESOURCE_EXECUTORS);
 
@@ -193,18 +188,20 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
     foreach ($health->run()->getNodes() as $node) {
         $hostname = $node->getHostname();
         $executor = $executors[$hostname] ?? [];
+        $newStatus = $node->isOnline() ? 'online' : 'offline';
 
-        if ($node->isOnline() && $forceShowError && ($executor['status'] ?? '') !== 'online') {
-            Console::success('Executor "' . $node->getHostname() . '" went online.');
+        if ($firstCheck || Http::isDevelopment() || $executor['status'] !== $newStatus) {
+            if ($newStatus === 'online') {
+                Console::info('Executor "' . $hostname . '" went online');
+            } else {
+                $message = $node->getState()['message'] ?? 'Unexpected error.';
+                $error = new Exception('Executor "' . $hostname . '" went offline: ' . $message, 500);
+                logError($error, "healthCheckError", $logger, null);
+            }
         }
 
         if (!$node->isOnline()) {
-            $healthy = false;
-
-            if ($forceShowError && ($executor['status'] ?? '') === 'online') {
-                $error = new Exception('Executor "' . $node->getHostname() . '" went offline: ' . ($node->getState()['message'] ?? 'Unexpected error.'), 500);
-                logError($error, "healthCheckError", $logger, null);
-            }
+            $healthy = false;            
         }
 
         $state->save(
@@ -224,7 +221,7 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
 
             $runtimes[$runtimeId] = [
                 'status' => $runtime['status'] ?? 'offline',
-                'usage' => $runtime['usage'] ?? 0,
+                'usage' => $runtime['usage'] ?? 100,
             ];
         }
         $state->saveAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
@@ -539,11 +536,12 @@ if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
 }
 
 run(function () use ($healthCheck) {
-    // Initial health check + start timer
-    $healthCheck(true);
+    $state = new State(new RedisAdapter(new RedisCluster(null, ['redis-cluster-0:6379', 'redis-cluster-1:6379', 'redis-cluster-2:6379'])));
+
+    $healthCheck($state, true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(false));
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck($state, false));
 
     $payloadSize = 22 * (1024 * 1024);
 
