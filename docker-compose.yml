@@ -39,6 +39,11 @@ services:
       - OPR_PROXY_LOGGING_CONFIG
       - OPR_PROXY_HEALTHCHECK
       - OPR_PROXY_HEALTHCHECK_URL
+    depends_on:
+      - redis-cluster-0
+      - redis-cluster-1
+      - redis-cluster-2
+      - redis-cluster-3
 
   redis:
     image: redis:6.0-alpine

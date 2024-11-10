@@ -192,10 +192,10 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
 
         if ($firstCheck || Http::isDevelopment() || $executor['status'] !== $newStatus) {
             if ($newStatus === 'online') {
-                Console::info('Executor "' . $hostname . '" went online');
+                Console::info('Executor "' . $hostname . '" is online');
             } else {
                 $message = $node->getState()['message'] ?? 'Unexpected error.';
-                $error = new Exception('Executor "' . $hostname . '" went offline: ' . $message, 500);
+                $error = new Exception('Executor "' . $hostname . '" is offline: ' . $message, 500);
                 logError($error, "healthCheckError", $logger, null);
             }
         }
