@@ -47,7 +47,7 @@ class RedisCluster implements Adapter
     /**
      * @param  array<string,string>  $entries
      * @param  string  $hash
-     * 
+     *
      * @return bool|array<string,string>
      */
     public function saveAll(array $entries, string $hash): bool|array

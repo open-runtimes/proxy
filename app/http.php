@@ -139,7 +139,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
         $balancer1->addFilter(function ($option) {
             return ($option->getState('usage', 100)) < 80;
         });
-        
+
         // Only low runtime-cpu usage
         if (!empty($runtimeId)) {
             $balancer1->addFilter(function ($option) use ($runtimeId) {
@@ -194,7 +194,7 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
 
         if ($node->isOnline() && $forceShowError && ($executor['status'] ?? '') !== 'online') {
             Console::success('Executor "' . $node->getHostname() . '" went online.');
-        } 
+        }
 
         if (!$node->isOnline()) {
             $healthy = false;
@@ -206,8 +206,8 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
         }
 
         $state->saveExecutor(
-            $hostname, 
-            status: $node->isOnline() ? 'online' : 'offline', 
+            $hostname,
+            status: $node->isOnline() ? 'online' : 'offline',
             usage: $node->getState()['usage'] ?? 0
         );
 

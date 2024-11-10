@@ -2,12 +2,10 @@
 
 namespace OpenRuntimes\State;
 
-use OpenRuntimes\State\Adapter;
-
 class State
 {
-    const HASH_KEY_EXECUTOR = 'executor';
-    const HASH_KEY_EXECUTOR_RUNTIMES = 'executor-runtimes';
+    public const HASH_KEY_EXECUTOR = 'executor';
+    public const HASH_KEY_EXECUTOR_RUNTIMES = 'executor-runtimes';
 
     /**
      * @var Adapter
@@ -24,10 +22,10 @@ class State
 
     /**
      * Save executor status
-     * 
+     *
      * @param  string  $hostname
      * @param  array   $executor
-     * 
+     *
      * @return bool
      */
     public function saveExecutor(string $executorHostname, string $status, int $usage): bool
@@ -46,7 +44,7 @@ class State
 
     /**
      * Get all executors status
-     * 
+     *
      * @return array
      */
     public function listExecutors(): array
@@ -63,9 +61,9 @@ class State
 
     /**
      * Get all runtimes by executor instance
-     * 
+     *
      * @param  string  $executorHostname
-     * 
+     *
      * @return array
      */
     public function listRuntimes(string $executorHostname): array
@@ -82,12 +80,12 @@ class State
 
     /**
      * Save runtime status
-     * 
+     *
      * @param  string  $executorHostname
      * @param  string  $runtimeId
      * @param  string  $status
      * @param  int     $usage
-     * 
+     *
      * @return bool
      */
     public function saveRuntime(string $executorHostname, string $runtimeId, string $status, int $usage): bool
@@ -106,10 +104,10 @@ class State
 
     /**
      * Save multiple runtimes
-     * 
+     *
      * @param  string  $executorHostname
      * @param  array   $runtimes
-     * 
+     *
      * @return bool
      */
     public function saveRuntimes(string $executorHostname, array $runtimes): bool
@@ -124,7 +122,7 @@ class State
 
     /**
      * Purge executors
-     * 
+     *
      * @return bool
      */
     public function flush(): bool
