@@ -1,5 +1,5 @@
 # Install PHP libraries
-FROM composer:2.0 as composer
+FROM composer:2.0 AS composer
 
 WORKDIR /usr/local/src/
 

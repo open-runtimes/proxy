@@ -23,11 +23,11 @@ class State
      * @param  string  $resource
      * @param  string  $name
      * @param  string  $status
-     * @param  int     $usage
+     * @param  float   $usage
      *
      * @return bool
      */
-    public function save(string $resource, string $name, string $status, int $usage): bool
+    public function save(string $resource, string $name, string $status, float $usage): bool
     {
         $string = json_encode([
             'status' => $status,
