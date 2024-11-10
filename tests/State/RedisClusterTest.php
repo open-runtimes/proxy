@@ -1,6 +1,6 @@
 <?php
 
-namespace OpenRuntimes\Tests;
+namespace OpenRuntimes\Tests\State;
 
 use RedisCluster as RedisCluster;
 use OpenRuntimes\State\Adapter\RedisCluster as RedisAdapter;

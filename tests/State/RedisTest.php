@@ -1,6 +1,6 @@
 <?php
 
-namespace OpenRuntimes\Tests;
+namespace OpenRuntimes\Tests\State;
 
 use OpenRuntimes\State\State;
 use Redis as Redis;
