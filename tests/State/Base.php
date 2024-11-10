@@ -1,6 +1,6 @@
 <?php
 
-namespace OpenRuntimes\Tests\State;
+namespace Tests\State;
 
 use PHPUnit\Framework\TestCase;
 use OpenRuntimes\State\State;
