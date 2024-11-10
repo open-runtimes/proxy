@@ -34,13 +34,11 @@ class State
             'usage' => $usage,
         ], JSON_THROW_ON_ERROR);
 
-        $this->adapter->save(
+        return $this->adapter->save(
             key: $name,
-            data: json_encode($string, JSON_THROW_ON_ERROR),
+            data: $string,
             hash: $resource
         );
-
-        return true;
     }
 
     /**
@@ -50,13 +48,13 @@ class State
      * 
      * @return array<string, array<string, mixed>>
      */
-    public function list($resource): array
+    public function list(string $resource): array
     {
         $entries = $this->adapter->getAll($resource);
 
         $objects = [];
         foreach ($entries as $key => $value) {
-            $json = json_decode($value, true, 2, JSON_THROW_ON_ERROR);
+            $json = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
             $objects[$key] = [
                 'status' => $json['status'] ?? null,
                 'usage' => $json['usage'] ?? 0,

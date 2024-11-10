@@ -27,18 +27,18 @@ class Redis implements Adapter
      * @param  string  $key
      * @param  string  $data
      * @param  string  $hash
-     * @return bool|string
+     * @return bool
      */
-    public function save(string $key, string $data, string $hash): bool|string
+    public function save(string $key, string $data, string $hash): bool
     {
         if (empty($key) || empty($data)) {
             return false;
         }
 
         try {
-            $this->redis->hSet($key, $data, $hash);
+            $result = $this->redis->hSet($hash, $key, $data);
 
-            return $data;
+            return $result === 1 || $result === 0;
         } catch (Throwable $th) {
             return false;
         }

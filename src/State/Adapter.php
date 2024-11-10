@@ -8,9 +8,9 @@ interface Adapter
      * @param  string  $key
      * @param  string  $data
      * @param  string  $hash
-     * @return bool|string
+     * @return bool
      */
-    public function save(string $key, string $data, string $hash): bool|string;
+    public function save(string $key, string $data, string $hash): bool;
 
     /**
      * @param  array<string,string>  $entries
