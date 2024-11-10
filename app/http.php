@@ -175,7 +175,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     return $group;
 }, ['algorithm', 'request', 'state']);
 
-$healthCheck = function (State $state, bool $firstCheck = false, ) use ($register): void {
+$healthCheck = function (State $state, bool $firstCheck = false) use ($register): void {
     $logger = $register->get('logger');
     $executors = $state->list(RESOURCE_EXECUTORS);
 
@@ -201,7 +201,7 @@ $healthCheck = function (State $state, bool $firstCheck = false, ) use ($registe
         }
 
         if (!$node->isOnline()) {
-            $healthy = false;            
+            $healthy = false;
         }
 
         $state->save(
