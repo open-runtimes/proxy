@@ -13,7 +13,7 @@ class State
     private $adapter;
 
     /**
-     * @param  Adapter  $cache
+     * @param  Adapter  $adapter
      */
     public function __construct(Adapter $adapter)
     {
@@ -24,18 +24,19 @@ class State
      * Save executor status
      *
      * @param  string  $hostname
-     * @param  array   $executor
+     * @param  string  $status
+     * @param  int     $usage
      *
      * @return bool
      */
-    public function saveExecutor(string $executorHostname, string $status, int $usage): bool
+    public function saveExecutor(string $hostname, string $status, int $usage): bool
     {
         $this->adapter->save(
-            key: $executorHostname,
+            key: $hostname,
             data: json_encode([
                 'status' => $status,
                 'usage' => $usage,
-            ]),
+            ], JSON_THROW_ON_ERROR),
             hash: State::HASH_KEY_EXECUTOR
         );
 
@@ -45,7 +46,7 @@ class State
     /**
      * Get all executors status
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function listExecutors(): array
     {
@@ -62,13 +63,13 @@ class State
     /**
      * Get all runtimes by executor instance
      *
-     * @param  string  $executorHostname
+     * @param  string  $hostname
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function listRuntimes(string $executorHostname): array
+    public function listRuntimes(string $hostname): array
     {
-        $runtimes = $this->adapter->getAll(State::HASH_KEY_EXECUTOR_RUNTIMES . ':' . $executorHostname);
+        $runtimes = $this->adapter->getAll(State::HASH_KEY_EXECUTOR_RUNTIMES . ':' . $hostname);
 
         $objects = [];
         foreach ($runtimes as $key => $value) {
@@ -81,22 +82,22 @@ class State
     /**
      * Save runtime status
      *
-     * @param  string  $executorHostname
+     * @param  string  $hostname
      * @param  string  $runtimeId
      * @param  string  $status
      * @param  int     $usage
      *
      * @return bool
      */
-    public function saveRuntime(string $executorHostname, string $runtimeId, string $status, int $usage): bool
+    public function saveRuntime(string $hostname, string $runtimeId, string $status, int $usage): bool
     {
         $this->adapter->save(
             key: $runtimeId,
             data: json_encode([
                 'status' => $status,
                 'usage' => $usage
-            ]),
-            hash: State::HASH_KEY_EXECUTOR_RUNTIMES . ':' . $executorHostname
+            ], JSON_THROW_ON_ERROR),
+            hash: State::HASH_KEY_EXECUTOR_RUNTIMES . ':' . $hostname
         );
 
         return true;
@@ -105,16 +106,21 @@ class State
     /**
      * Save multiple runtimes
      *
-     * @param  string  $executorHostname
-     * @param  array   $runtimes
+     * @param  string  $hostname
+     * @param  array<string, array<string, mixed>>  $runtimes
      *
      * @return bool
      */
-    public function saveRuntimes(string $executorHostname, array $runtimes): bool
+    public function saveRuntimes(string $hostname, array $runtimes): bool
     {
+        $strings = [];
+        foreach ($runtimes as $key => $value) {
+            $strings[$key] = json_encode($value, JSON_THROW_ON_ERROR);
+        }
+
         $this->adapter->saveAll(
-            entries: $runtimes,
-            hash: State::HASH_KEY_EXECUTOR_RUNTIMES . ':' . $executorHostname
+            entries: $strings,
+            hash: State::HASH_KEY_EXECUTOR_RUNTIMES . ':' . $hostname
         );
 
         return true;

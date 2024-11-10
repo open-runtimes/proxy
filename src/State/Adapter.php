@@ -20,7 +20,7 @@ interface Adapter
     public function saveAll(array $entries, string $hash): bool|array;
 
     /**
-     * @param  string  $key
+     * @param  string  $hash
      * @return array<string, string>
      */
     public function getAll(string $hash): array;

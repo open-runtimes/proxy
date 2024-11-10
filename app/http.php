@@ -200,7 +200,7 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
             $healthy = false;
 
             if ($forceShowError && ($executor['status'] ?? '') === 'online') {
-                $error = new Exception('Executor "' . $node->getHostname() . '" went offline: ' . $node->getState()['message'] ?? 'Unexpected error.', 500);
+                $error = new Exception('Executor "' . $node->getHostname() . '" went offline: ' . ($node->getState()['message'] ?? 'Unexpected error.'), 500);
                 logError($error, "healthCheckError", $logger, null);
             }
         }
@@ -212,7 +212,13 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
         );
 
         $runtimes = [];
+
         foreach ($node->getState()['runtimes'] ?? [] as $runtimeId => $runtime) {
+            if (!\is_string($runtimeId) || !\is_array($runtime)) {
+                Console::warning('Invalid runtime data for ' . $hostname . ' runtime ' . $runtimeId);
+                continue;
+            }
+
             $runtimes[$runtimeId] = [
                 'status' => $runtime['status'] ?? 'offline',
                 'usage' => $runtime['usage'] ?? 0,
@@ -223,7 +229,7 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
         try {
-            Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', ''));
+            Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL') ?? '');
         } catch (\Throwable $th) {
             logError($th, 'healthCheckError', $logger, null);
         }

@@ -9,7 +9,6 @@ use OpenRuntimes\State\State;
 class RedisClusterTest extends Base
 {
     protected static RedisCluster $redis;
-    protected static State $state;
 
     public static function setUpBeforeClass(): void
     {
