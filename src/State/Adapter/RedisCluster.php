@@ -62,6 +62,7 @@ class RedisCluster implements Adapter
             $this->redis->hMSet($hash, $entries);
             $this->redis->exec();
 
+            return true;
         } catch (Throwable $th) {
             return false;
         }
