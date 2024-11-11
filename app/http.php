@@ -278,6 +278,10 @@ function logError(Throwable $error, string $action, ?Logger $logger, Route $rout
 Http::init()
     ->inject('request')
     ->action(function (Request $request) {
+        if ($request->getURI() === '/v1/proxy/health') {
+            return;
+        }
+
         $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
 
         if (empty($secretKey) || $secretKey !== Http::getEnv('OPR_PROXY_SECRET', '')) {
