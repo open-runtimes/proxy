@@ -535,34 +535,7 @@ Http::error()
         $response->json($output);
     });
 
-
-
-$dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', ''));
-    
-switch($dsn->getScheme()) {
-    case 'redis':
-        $redis = new Redis();
-        $redis->connect($dsn->getHost(), $dsn->getPort());
-        return new State(new RedisAdapter($redis));
-    default:
-        throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
-}
-
-// If no health check, mark all as online
-if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
-    $hostnames = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
-
-    foreach ($hostnames as $hostname) {
-        $state->save(RESOURCE_EXECUTORS, $hostname, 'online', 0);
-    }
-}
-
-run(function () use ($healthCheck, $state) {
-    $healthCheck($state, true);
-
-    $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck($state, false));
-
+run(function () use ($healthCheck) {
     $payloadSize = 22 * (1024 * 1024);
 
     $settings = [
@@ -571,6 +544,25 @@ run(function () use ($healthCheck, $state) {
     ];
     // Start HTTP server
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
+
+    $dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', ''));
+
+    switch($dsn->getScheme()) {
+        case 'redis':
+            $redis = new Redis();
+            $redis->connect($dsn->getHost(), $dsn->getPort());
+            $state = new State(new RedisAdapter($redis));
+            break;
+        default:
+            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
+    }
+
+    $healthCheck($state, true);
+
+    $state = new State(new RedisAdapter($redis));
+
+    $defaultInterval = '10000'; // 10 seconds
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck($state, false));
 
     Console::success('Functions proxy is ready.');
 
