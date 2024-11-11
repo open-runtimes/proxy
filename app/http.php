@@ -112,12 +112,12 @@ $register->set('algorithm', function () {
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
 Http::setResource('state', function () {
-    $dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', ''));
-    
+    $dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
+
     switch($dsn->getScheme()) {
         case 'redis':
             $redis = new Redis();
-            $redis->connect($dsn->getHost(), $dsn->getPort());
+            $redis->connect($dsn->getHost(), intval($dsn->getPort()));
             return new State(new RedisAdapter($redis));
         default:
             throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
@@ -545,12 +545,12 @@ run(function () use ($healthCheck) {
     // Start HTTP server
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
 
-    $dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', ''));
+    $dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
 
     switch($dsn->getScheme()) {
         case 'redis':
             $redis = new Redis();
-            $redis->connect($dsn->getHost(), $dsn->getPort());
+            $redis->connect($dsn->getHost(), intval($dsn->getPort()));
             $state = new State(new RedisAdapter($redis));
             break;
         default:
