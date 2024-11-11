@@ -40,13 +40,17 @@ services:
       - OPR_PROXY_HEALTHCHECK
       - OPR_PROXY_HEALTHCHECK_URL
     depends_on:
-      - redis-cluster-0
+      redis-cluster-0:
+        condition: service_healthy
 
   redis:
     image: redis:6.0-alpine
     container_name: redis
     networks:
       servers:
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-h", "localhost", "-p", "6379", "ping" ]
+      start_interval: 1s
 
   redis-cluster-0:
     image: docker.io/bitnami/redis-cluster:7.4
@@ -58,9 +62,15 @@ services:
     networks:
       servers:
     depends_on:
-      - redis-cluster-1
-      - redis-cluster-2
-      - redis-cluster-3
+    redis-cluster-1:
+      condition: service_started
+    redis-cluster-2:
+      condition: service_started
+    redis-cluster-3:
+      condition: service_started
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-h", "localhost", "-p", "6379", "ping" ]
+      start_interval: 1s
 
   redis-cluster-1:
     image: docker.io/bitnami/redis-cluster:7.4
@@ -69,6 +79,9 @@ services:
       - REDIS_NODES=redis-cluster-0 redis-cluster-1 redis-cluster-2 redis-cluster-3
     networks:
       servers:
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-h", "localhost", "-p", "6379", "ping" ]
+      start_interval: 1s
 
   redis-cluster-2:
     image: docker.io/bitnami/redis-cluster:7.4
@@ -77,6 +90,9 @@ services:
       - REDIS_NODES=redis-cluster-0 redis-cluster-1 redis-cluster-2 redis-cluster-3
     networks:
       servers:
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-h", "localhost", "-p", "6379", "ping" ]
+      start_interval: 1s
 
   redis-cluster-3:
     image: docker.io/bitnami/redis-cluster:7.4
@@ -85,6 +101,9 @@ services:
       - REDIS_NODES=redis-cluster-0 redis-cluster-1 redis-cluster-2 redis-cluster-3
     networks:
       servers:
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-h", "localhost", "-p", "6379", "ping" ]
+      start_interval: 1s
 
   mockoon1:
     container_name: mockoon1

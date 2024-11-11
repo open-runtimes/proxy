@@ -18,8 +18,7 @@ jobs:
         export BUILDKIT_PROGRESS=plain
         docker pull composer:2.0
         docker compose build
-        docker compose up -d
-        sleep 25
+        docker compose up -d --wait
 
     - name: Doctor
       run: docker ps
