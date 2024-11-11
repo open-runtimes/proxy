@@ -45,9 +45,6 @@ class Health
                     \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                     \curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                     \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-                    \curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'authorization: Bearer ' . Http::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
-                    ]);
 
                     $executorResponse = \curl_exec($ch);
                     $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
