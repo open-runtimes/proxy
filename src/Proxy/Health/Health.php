@@ -2,6 +2,8 @@
 
 namespace OpenRuntimes\Proxy\Health;
 
+use Utopia\Http\Http;
+
 use function Swoole\Coroutine\batch;
 
 class Health
@@ -43,6 +45,9 @@ class Health
                     \curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                     \curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                     \curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+                    \curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                        'authorization: Bearer ' . Http::getEnv('OPR_PROXY_EXECUTOR_SECRET', '')
+                    ]);
 
                     $executorResponse = \curl_exec($ch);
                     $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -62,7 +67,7 @@ class Health
                             $node->setState([ 'message' => $message ]);
                         }
                     } else {
-                        $message = 'Code: ' . $statusCode . ' with response "' . $executorResponse .  '" and error error: ' . $error;
+                        $message = 'Code: ' . $statusCode . ' with response "' . $executorResponse .  '" and error: ' . $error;
                         $node->setOnline(false);
                         $node->setState([ 'message' => $message ]);
                     }
