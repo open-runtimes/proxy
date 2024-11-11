@@ -309,7 +309,7 @@ Http::wildcard()
         if (empty($secretKey) || $secretKey !== Http::getEnv('OPR_PROXY_SECRET', '')) {
             throw new Exception('Incorrect proxy key.', 401);
         }
-        
+
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
         $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $containers) {
