@@ -2,8 +2,6 @@
 
 namespace OpenRuntimes\Proxy\Health;
 
-use Utopia\Http\Http;
-
 use function Swoole\Coroutine\batch;
 
 class Health

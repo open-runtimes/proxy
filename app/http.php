@@ -290,6 +290,20 @@ function logError(Throwable $error, string $action, ?Logger $logger, Route $rout
     }
 }
 
+Http::init()
+    ->inject('request')
+    ->action(function (Request $request) {
+        if ($request->getURI() === '/v1/proxy/health') {
+            return;
+        }
+
+        $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
+
+        if (empty($secretKey) || $secretKey !== Http::getEnv('OPR_PROXY_SECRET', '')) {
+            throw new Exception('Incorrect proxy key.', 401);
+        }
+    });
+
 Http::get('/v1/proxy/health')
     ->inject('response')
     ->action(function (Response $response) {
@@ -304,12 +318,6 @@ Http::wildcard()
     ->inject('response')
     ->inject('containers')
     ->action(function (Group $balancer, Request $request, SwooleResponse $response, Table $containers) {
-        $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
-
-        if (empty($secretKey) || $secretKey !== Http::getEnv('OPR_PROXY_SECRET', '')) {
-            throw new Exception('Incorrect proxy key.', 401);
-        }
-
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
         $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $containers) {
