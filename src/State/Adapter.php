@@ -15,9 +15,9 @@ interface Adapter
     /**
      * @param  array<string,string>  $entries
      * @param  string  $hash
-     * @return bool|array<string,string>
+     * @return bool
      */
-    public function saveAll(array $entries, string $hash): bool|array;
+    public function saveAll(array $entries, string $hash): bool;
 
     /**
      * @param  string  $hash

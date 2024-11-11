@@ -156,7 +156,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
         $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname);
 
         if (Http::isDevelopment()) {
-            Console::log("Updated balancing option '" . $hostname . "' with ". \count($executor['runtimes'] ?? [])." runtimes: " . \json_encode($executor));
+            Console::log("Updated balancing option '" . $hostname . "' with ". \count($executor['runtimes'])." runtimes: " . \json_encode($executor));
         }
 
         $executor['hostname'] = $hostname;

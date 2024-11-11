@@ -50,7 +50,7 @@ class Redis implements Adapter
      *
      * @return bool
      */
-    public function saveAll(array $entries, string $hash): bool|array
+    public function saveAll(array $entries, string $hash): bool
     {
         if (empty($hash) || empty($entries)) {
             return false;

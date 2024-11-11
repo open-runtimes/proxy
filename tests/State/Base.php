@@ -100,7 +100,7 @@ abstract class Base extends TestCase
                 'status' => 'online',
                 'usage' => 100,
             ],
-        ]; 
+        ];
 
         $result = self::$state->saveAll($resource, $entries);
         $this->assertEquals(true, $result);
