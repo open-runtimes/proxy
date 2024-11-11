@@ -39,6 +39,7 @@ services:
       - OPR_PROXY_LOGGING_CONFIG
       - OPR_PROXY_HEALTHCHECK
       - OPR_PROXY_HEALTHCHECK_URL
+      - OPR_PROXY_CONNECTIONS_STATE
     depends_on:
       redis-cluster-0:
         condition: service_healthy

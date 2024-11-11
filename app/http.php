@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use OpenRuntimes\State\Adapter\RedisCluster as RedisAdapter;
+use OpenRuntimes\State\Adapter\Redis as RedisAdapter;
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
 use OpenRuntimes\State\State;
@@ -112,8 +112,16 @@ $register->set('algorithm', function () {
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
 Http::setResource('state', function () {
-    $redis = new RedisCluster(null, ['redis-cluster-0:6379', 'redis-cluster-1:6379', 'redis-cluster-2:6379']);
-    return new State(new RedisAdapter($redis));
+    $dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', ''));
+    
+    switch($dsn->getScheme()) {
+        case 'redis':
+            $redis = new Redis();
+            $redis->connect($dsn->getHost(), $dsn->getPort());
+            return new State(new RedisAdapter($redis));
+        default:
+            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
+    }
 });
 
 // Balancer must NOT be registry. This has to run on every request
@@ -527,23 +535,29 @@ Http::error()
         $response->json($output);
     });
 
+
+
+$dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', ''));
+    
+switch($dsn->getScheme()) {
+    case 'redis':
+        $redis = new Redis();
+        $redis->connect($dsn->getHost(), $dsn->getPort());
+        return new State(new RedisAdapter($redis));
+    default:
+        throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
+}
+
 // If no health check, mark all as online
 if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
     $hostnames = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
-
-    /**
-     * @var State $state
-     */
-    $state = $register->get('state');
 
     foreach ($hostnames as $hostname) {
         $state->save(RESOURCE_EXECUTORS, $hostname, 'online', 0);
     }
 }
 
-run(function () use ($healthCheck) {
-    $state = new State(new RedisAdapter(new RedisCluster(null, ['redis-cluster-0:6379', 'redis-cluster-1:6379', 'redis-cluster-2:6379'])));
-
+run(function () use ($healthCheck, $state) {
     $healthCheck($state, true);
 
     $defaultInterval = '10000'; // 10 seconds

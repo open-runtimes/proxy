@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d4cb0bac11d3298da1ba7e4d16e59aec",
+    "content-hash": "3f921b5828774bbe84648eb7ff30bee3",
     "packages": [
         {
             "name": "utopia-php/balancer",
@@ -108,16 +108,16 @@
         },
         {
             "name": "utopia-php/dsn",
-            "version": "0.1.0",
+            "version": "0.2.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/dsn.git",
-                "reference": "17a5935eab1b89fb4b95600db50a1b6d5faa6cea"
+                "reference": "42ee37a3d1785100b2f69091c9d4affadb6846eb"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/dsn/zipball/17a5935eab1b89fb4b95600db50a1b6d5faa6cea",
-                "reference": "17a5935eab1b89fb4b95600db50a1b6d5faa6cea",
+                "url": "https://api.github.com/repos/utopia-php/dsn/zipball/42ee37a3d1785100b2f69091c9d4affadb6846eb",
+                "reference": "42ee37a3d1785100b2f69091c9d4affadb6846eb",
                 "shasum": ""
             },
             "require": {
@@ -149,9 +149,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/dsn/issues",
-                "source": "https://github.com/utopia-php/dsn/tree/0.1.0"
+                "source": "https://github.com/utopia-php/dsn/tree/0.2.1"
             },
-            "time": "2022-10-26T10:06:20+00:00"
+            "time": "2024-05-07T02:01:25+00:00"
         },
         {
             "name": "utopia-php/fetch",
@@ -243,16 +243,16 @@
         },
         {
             "name": "utopia-php/logger",
-            "version": "0.6.1",
+            "version": "0.6.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/logger.git",
-                "reference": "7e8ff512c6f04577aba1df67c7b9628971946f9c"
+                "reference": "25b5bd2ad8bb51292f76332faa7034644fd0941d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/logger/zipball/7e8ff512c6f04577aba1df67c7b9628971946f9c",
-                "reference": "7e8ff512c6f04577aba1df67c7b9628971946f9c",
+                "url": "https://api.github.com/repos/utopia-php/logger/zipball/25b5bd2ad8bb51292f76332faa7034644fd0941d",
+                "reference": "25b5bd2ad8bb51292f76332faa7034644fd0941d",
                 "shasum": ""
             },
             "require": {
@@ -291,9 +291,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/logger/issues",
-                "source": "https://github.com/utopia-php/logger/tree/0.6.1"
+                "source": "https://github.com/utopia-php/logger/tree/0.6.2"
             },
-            "time": "2024-09-20T14:02:12+00:00"
+            "time": "2024-10-14T16:02:49+00:00"
         },
         {
             "name": "utopia-php/registry",
@@ -351,30 +351,30 @@
     "packages-dev": [
         {
             "name": "doctrine/instantiator",
-            "version": "2.0.0",
+            "version": "1.5.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/doctrine/instantiator.git",
-                "reference": "c6222283fa3f4ac679f8b9ced9a4e23f163e80d0"
+                "reference": "0a0fa9780f5d4e507415a065172d26a98d02047b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/doctrine/instantiator/zipball/c6222283fa3f4ac679f8b9ced9a4e23f163e80d0",
-                "reference": "c6222283fa3f4ac679f8b9ced9a4e23f163e80d0",
+                "url": "https://api.github.com/repos/doctrine/instantiator/zipball/0a0fa9780f5d4e507415a065172d26a98d02047b",
+                "reference": "0a0fa9780f5d4e507415a065172d26a98d02047b",
                 "shasum": ""
             },
             "require": {
-                "php": "^8.1"
+                "php": "^7.1 || ^8.0"
             },
             "require-dev": {
-                "doctrine/coding-standard": "^11",
+                "doctrine/coding-standard": "^9 || ^11",
                 "ext-pdo": "*",
                 "ext-phar": "*",
-                "phpbench/phpbench": "^1.2",
-                "phpstan/phpstan": "^1.9.4",
-                "phpstan/phpstan-phpunit": "^1.3",
-                "phpunit/phpunit": "^9.5.27",
-                "vimeo/psalm": "^5.4"
+                "phpbench/phpbench": "^0.16 || ^1",
+                "phpstan/phpstan": "^1.4",
+                "phpstan/phpstan-phpunit": "^1",
+                "phpunit/phpunit": "^7.5 || ^8.5 || ^9.5",
+                "vimeo/psalm": "^4.30 || ^5.4"
             },
             "type": "library",
             "autoload": {
@@ -401,7 +401,7 @@
             ],
             "support": {
                 "issues": "https://github.com/doctrine/instantiator/issues",
-                "source": "https://github.com/doctrine/instantiator/tree/2.0.0"
+                "source": "https://github.com/doctrine/instantiator/tree/1.5.0"
             },
             "funding": [
                 {
@@ -417,7 +417,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2022-12-30T00:23:10+00:00"
+            "time": "2022-12-30T00:15:36+00:00"
         },
         {
             "name": "laravel/pint",
@@ -487,16 +487,16 @@
         },
         {
             "name": "myclabs/deep-copy",
-            "version": "1.12.0",
+            "version": "1.12.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/myclabs/DeepCopy.git",
-                "reference": "3a6b9a42cd8f8771bd4295d13e1423fa7f3d942c"
+                "reference": "123267b2c49fbf30d78a7b2d333f6be754b94845"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/myclabs/DeepCopy/zipball/3a6b9a42cd8f8771bd4295d13e1423fa7f3d942c",
-                "reference": "3a6b9a42cd8f8771bd4295d13e1423fa7f3d942c",
+                "url": "https://api.github.com/repos/myclabs/DeepCopy/zipball/123267b2c49fbf30d78a7b2d333f6be754b94845",
+                "reference": "123267b2c49fbf30d78a7b2d333f6be754b94845",
                 "shasum": ""
             },
             "require": {
@@ -535,7 +535,7 @@
             ],
             "support": {
                 "issues": "https://github.com/myclabs/DeepCopy/issues",
-                "source": "https://github.com/myclabs/DeepCopy/tree/1.12.0"
+                "source": "https://github.com/myclabs/DeepCopy/tree/1.12.1"
             },
             "funding": [
                 {
@@ -543,7 +543,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2024-06-12T14:39:25+00:00"
+            "time": "2024-11-08T17:47:46+00:00"
         },
         {
             "name": "nikic/php-parser",
@@ -2260,7 +2260,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -2269,7 +2269,7 @@
         "ext-json": "*",
         "ext-swoole": "*"
     },
-    "platform-dev": [],
+    "platform-dev": {},
     "platform-overrides": {
         "php": "8.0"
     },
