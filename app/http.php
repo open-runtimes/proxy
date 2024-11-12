@@ -53,6 +53,23 @@ Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION)
 // Setup Registry
 $register = new Registry();
 
+function createState(string $dsn): State {
+    $dsn = new DSN($dsn);
+
+    switch($dsn->getScheme()) {
+        case 'redis':
+            $redis = new Redis();
+            $redis->connect($dsn->getHost(), intval($dsn->getPort()));
+            return new State(new RedisAdapter($redis));
+        case 'redis-cluster':
+            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
+            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
+            return new State(new RedisClusterAdapter($redisCluster));
+        default:
+            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
+    }
+}
+
 /**
  * Create logger for cloud logging
  */
@@ -112,22 +129,7 @@ $register->set('algorithm', function () {
 // Setup Resources
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
-Http::setResource('state', function () {
-    $dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
-
-    switch($dsn->getScheme()) {
-        case 'redis':
-            $redis = new Redis();
-            $redis->connect($dsn->getHost(), intval($dsn->getPort()));
-            return new State(new RedisAdapter($redis));
-        case 'redis-cluster':
-            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
-            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
-            return new State(new RedisClusterAdapter($redisCluster));
-        default:
-            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
-    }
-});
+Http::setResource('state', fn () => createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? ''));
 
 // Balancer must NOT be registry. This has to run on every request
 Http::setResource('balancer', function (Algorithm $algorithm, Request $request, State $state) {
@@ -550,26 +552,8 @@ run(function () use ($healthCheck) {
     // Start HTTP server
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
 
-    $dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
-
-    switch($dsn->getScheme()) {
-        case 'redis':
-            $redis = new Redis();
-            $redis->connect($dsn->getHost(), intval($dsn->getPort()));
-            $state = new State(new RedisAdapter($redis));
-            break;
-        case 'redis-cluster':
-            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
-            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
-            $state = new State(new RedisClusterAdapter($redisCluster));
-            break;
-        default:
-            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
-    }
-
+    $state = createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
     $healthCheck($state, true);
-
-    $state = new State(new RedisAdapter($redis));
 
     $defaultInterval = '10000'; // 10 seconds
     Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck($state, false));
@@ -578,3 +562,4 @@ run(function () use ($healthCheck) {
 
     $http->start();
 });
+
