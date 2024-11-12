@@ -53,7 +53,8 @@ Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION)
 // Setup Registry
 $register = new Registry();
 
-function createState(string $dsn): State {
+function createState(string $dsn): State
+{
     $dsn = new DSN($dsn);
 
     switch($dsn->getScheme()) {
@@ -562,4 +563,3 @@ run(function () use ($healthCheck) {
 
     $http->start();
 });
-
