@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use OpenRuntimes\State\Adapter\Redis as RedisAdapter;
+use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterAdapter;
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
 use OpenRuntimes\State\State;
@@ -119,6 +120,10 @@ Http::setResource('state', function () {
             $redis = new Redis();
             $redis->connect($dsn->getHost(), intval($dsn->getPort()));
             return new State(new RedisAdapter($redis));
+        case 'redis-cluster':
+            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
+            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
+            return new State(new RedisClusterAdapter($redisCluster));
         default:
             throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
     }
@@ -552,6 +557,11 @@ run(function () use ($healthCheck) {
             $redis = new Redis();
             $redis->connect($dsn->getHost(), intval($dsn->getPort()));
             $state = new State(new RedisAdapter($redis));
+            break;
+        case 'redis-cluster':
+            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
+            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
+            $state = new State(new RedisClusterAdapter($redisCluster));
             break;
         default:
             throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
