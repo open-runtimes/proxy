@@ -67,7 +67,7 @@ class Health
                             $node->setState([ 'message' => $message ]);
                         }
                     } else {
-                        $message = 'Code: ' . $statusCode . ' with response "' . $executorResponse .  '" and error error: ' . $error;
+                        $message = 'Code: ' . $statusCode . ' with response "' . $executorResponse .  '" and error: ' . $error;
                         $node->setOnline(false);
                         $node->setState([ 'message' => $message ]);
                     }
