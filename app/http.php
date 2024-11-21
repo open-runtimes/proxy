@@ -361,7 +361,7 @@ Http::wildcard()
                     $stateItem['runtimes'][$runtimeId] = [];
                 }
 
-                $stateItem['runtimes'][$runtimeId]['usage'] = null;
+                $stateItem['runtimes'][$runtimeId]['usage'] = 0;
 
                 $record['state'] = \json_encode($stateItem);
 
