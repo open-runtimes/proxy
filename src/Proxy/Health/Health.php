@@ -56,16 +56,8 @@ class Health
                     \curl_close($ch);
 
                     if ($statusCode == 200 && !\is_bool($executorResponse)) {
-                        $body = (array) \json_decode($executorResponse, true);
-
-                        if ($body['status'] === 'pass') {
-                            $node->setOnline(true);
-                            $node->setState($body);
-                        } else {
-                            $message = 'Response does not include "pass" status: ' . $executorResponse;
-                            $node->setOnline(false);
-                            $node->setState([ 'message' => $message ]);
-                        }
+                        $node->setOnline(true);
+                        $node->setState(\json_decode($executorResponse, true) ?: []);
                     } else {
                         $message = 'Code: ' . $statusCode . ' with response "' . $executorResponse .  '" and error error: ' . $error;
                         $node->setOnline(false);

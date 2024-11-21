@@ -53,7 +53,7 @@ $register->set('containers', function () {
     $state = new Table($count);
     $state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
     $state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
-    $state->column('state', Swoole\Table::TYPE_STRING, 16384); // State as JSON
+    $state->column('state', Swoole\Table::TYPE_STRING, 65536); // State as JSON
     $state->create();
     return $state;
 });
@@ -143,7 +143,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
                 /**
                  * @var array<string,mixed> $runtimes
                  */
-                $runtimes = $state['runtimes'];
+                $runtimes = $state['runtimes'] ?? [];
 
                 return \array_key_exists($runtimeId, $runtimes);
             });
@@ -240,8 +240,12 @@ $healthCheck = function (bool $forceShowError = false) use ($register): void {
         $hostname = $node->getHostname();
 
         $oldState = $containers->exists($hostname) ? $containers->get($hostname) : null;
-        $oldStatus = isset($oldState) ? ((array) $oldState)['status'] : null;
-        if ($forceShowError === true || (isset($oldStatus) && $oldStatus !== $status)) {
+        $oldStatus = null;
+        if (isset($oldState) && is_array($oldState)) {
+            $oldStatus = $oldState['status'] ?? null;
+        }
+
+        if ($forceShowError === true || $oldStatus !== $status) {
             if ($status === 'online') {
                 $message = 'Executor "' . $node->getHostname() . '" went online.';
                 Console::success($message);
@@ -357,8 +361,7 @@ Http::wildcard()
                     $stateItem['runtimes'][$runtimeId] = [];
                 }
 
-                $stateItem['runtimes'][$runtimeId]['status'] = 'pass';
-                $stateItem['runtimes'][$runtimeId]['usage'] = 0;
+                $stateItem['runtimes'][$runtimeId]['usage'] = null;
 
                 $record['state'] = \json_encode($stateItem);
 
