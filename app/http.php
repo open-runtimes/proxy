@@ -43,8 +43,8 @@ const ADDRESSING_METHOD_ANYCAST_EFFICIENT = 'anycast-efficient';
 const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
 const ADDRESSING_METHOD_BROADCAST = 'broadcast';
 
-const RESOURCE_EXECUTORS = 'executors';
-const RESOURCE_RUNTIMES = 'executors-runtimes:';
+const RESOURCE_EXECUTORS = '{executors}';
+const RESOURCE_RUNTIMES = '{executors-runtimes}:';
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
