@@ -1,3 +1,12 @@
 parameters:
     scanDirectories:
       - vendor/swoole/ide-helper
+    # Only analyze these paths
+    paths:
+        - app
+        - src
+        - tests
+    
+    # Explicitly exclude the vendor directory
+    excludePaths:
+        - vendor/*
