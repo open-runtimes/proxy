@@ -6,8 +6,8 @@ parameters:
 
     excludePaths:
         analyse:
-            - vendor/*
-            - !vendor/swoole/ide-helper/*
+            - %currentWorkingDirectory%/vendor/*
+            - !%currentWorkingDirectory%/vendor/swoole/ide-helper/*
 
     scanDirectories:
-        - vendor/swoole/ide-helper
+        - %currentWorkingDirectory%/vendor/swoole/ide-helper
