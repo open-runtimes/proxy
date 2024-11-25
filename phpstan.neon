@@ -1,10 +1,13 @@
 parameters:
-    # Only analyze these paths
     paths:
         - app
         - src
         - tests
 
+    excludePaths:
+        analyse:
+            - vendor/*
+            - !vendor/swoole/ide-helper/*
+
     scanDirectories:
-      - vendor/swoole/ide-helper
-    
+        - vendor/swoole/ide-helper
