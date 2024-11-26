@@ -175,6 +175,11 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
         $balancer = new Balancer($algorithm);
         $balancer->addFilter(fn () => true);
         $balancers[] = $balancer;
+    } else {
+        // Any executors
+        $balancer = new Balancer($algorithm);
+        $balancer->addFilter(fn () => true);
+        $balancers[] = $balancer;
     }
 
     foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
