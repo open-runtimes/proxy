@@ -137,11 +137,11 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
     $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-    $group = new Group();
-
     if ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
         $algorithm = new Random();
     }
+
+    $balancers = [];
 
     // Cold-started-only options
     $balancer1 = new Balancer($algorithm);
@@ -150,43 +150,54 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
     if ($method === ADDRESSING_METHOD_ANYCAST_EFFICIENT) {
-        // Only low host-cpu usage
-        $balancer1->addFilter(function ($option) {
-            return ($option->getState('usage', 100)) < 80;
-        });
-
-        // Only low runtime-cpu usage
+        // Executors with runtime cold-started
         if (!empty($runtimeId)) {
-            $balancer1->addFilter(function ($option) use ($runtimeId) {
+            $balancer = new Balancer($algorithm);
+            $balancer->addFilter(function ($option) use ($runtimeId) {
                 $runtimes = $option->getState('runtimes', []);
                 $runtime = $runtimes[$runtimeId] ?? [];
                 return ($runtime['usage'] ?? 100) < 80;
             });
+            $balancers[] = $balancer;
         }
 
-        // Any options
-        $balancer2 = new Balancer($algorithm);
-        $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+        // Executors with low host-cpu usage
+        $balancer = new Balancer($algorithm);
+        $balancer->addFilter(fn ($option) => \intval($option->getState('usage', '100')) < 80);
+        $balancers[] = $balancer;
+
+        // Online executors
+        $balancer = new Balancer($algorithm);
+        $balancer->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+        $balancers[] = $balancer;
+
+        // Any executors
+        $balancer = new Balancer($algorithm);
+        $balancer->addFilter(fn () => true);
+        $balancers[] = $balancer;
+    } else {
+        // Any executors
+        $balancer = new Balancer($algorithm);
+        $balancer->addFilter(fn () => true);
+        $balancers[] = $balancer;
     }
+
     foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
-        $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname);
+        $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname); // TODO: Avoid those extra Redis calls
+        $executor['hostname'] = $hostname;
 
         if (Http::isDevelopment()) {
             Console::log("Updated balancing option '" . $hostname . "' with ". \count($executor['runtimes'])." runtimes: " . \json_encode($executor));
         }
 
-        $executor['hostname'] = $hostname;
-
-        $balancer1->addOption(new Option($executor));
-        if (isset($balancer2)) {
-            $balancer2->addOption(new Option($executor));
+        foreach ($balancers as $balancer) {
+            $balancer->addOption(new Option($executor));
         }
     }
 
-    $group->add($balancer1);
-
-    if (isset($balancer2)) {
-        $group->add($balancer2);
+    $group = new Group();
+    foreach ($balancers as $balancer) {
+        $group->add($balancer);
     }
 
     return $group;
@@ -209,10 +220,10 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
 
         if ($firstCheck || Http::isDevelopment() || $executor['status'] !== $newStatus) {
             if ($newStatus === 'online') {
-                Console::info('Executor "' . $hostname . '" is online');
+                Console::info('Executor "' . $hostname . '" went online');
             } else {
                 $message = $node->getState()['message'] ?? 'Unexpected error.';
-                $error = new Exception('Executor "' . $hostname . '" is offline: ' . $message, 500);
+                $error = new Exception('Executor "' . $hostname . '" went offline: ' . $message, 500);
                 logError($error, "healthCheckError", $logger, null);
             }
         }
