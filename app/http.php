@@ -2,10 +2,12 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+use OpenRuntimes\State\Adapter\Redis as RedisAdapter;
+use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterAdapter;
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
+use OpenRuntimes\State\State;
 use Swoole\Runtime;
-use Swoole\Table;
 use Swoole\Timer;
 use Utopia\Logger\Log;
 use Utopia\Logger\Logger;
@@ -41,6 +43,9 @@ const ADDRESSING_METHOD_ANYCAST_EFFICIENT = 'anycast-efficient';
 const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
 const ADDRESSING_METHOD_BROADCAST = 'broadcast';
 
+const RESOURCE_EXECUTORS = '{executors}';
+const RESOURCE_RUNTIMES = '{executors-runtimes}:';
+
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
 Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION));
@@ -48,15 +53,23 @@ Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION)
 // Setup Registry
 $register = new Registry();
 
-$register->set('containers', function () {
-    $count = \count(\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')));
-    $state = new Table($count);
-    $state->column('hostname', Swoole\Table::TYPE_STRING, 128); // Same as key of row
-    $state->column('status', Swoole\Table::TYPE_STRING, 8); // 'online' or 'offline'
-    $state->column('state', Swoole\Table::TYPE_STRING, 65536); // State as JSON
-    $state->create();
-    return $state;
-});
+function createState(string $dsn): State
+{
+    $dsn = new DSN($dsn);
+
+    switch($dsn->getScheme()) {
+        case 'redis':
+            $redis = new Redis();
+            $redis->connect($dsn->getHost(), intval($dsn->getPort()));
+            return new State(new RedisAdapter($redis));
+        case 'redis-cluster':
+            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
+            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
+            return new State(new RedisClusterAdapter($redisCluster));
+        default:
+            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
+    }
+}
 
 /**
  * Create logger for cloud logging
@@ -117,160 +130,124 @@ $register->set('algorithm', function () {
 // Setup Resources
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
-Http::setResource('containers', fn () => $register->get('containers'));
+Http::setResource('state', fn () => createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? ''));
 
 // Balancer must NOT be registry. This has to run on every request
-Http::setResource('balancer', function (Algorithm $algorithm, Request $request, Table $containers) {
+Http::setResource('balancer', function (Algorithm $algorithm, Request $request, State $state) {
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
     $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-    $balancers = [];
+    $group = new Group();
+
+    if ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
+        $algorithm = new Random();
+    }
+
+    // Cold-started-only options
+    $balancer1 = new Balancer($algorithm);
+
+    // Only online executors
+    $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
 
     if ($method === ADDRESSING_METHOD_ANYCAST_EFFICIENT) {
-        // Optimal routing considering online status, cpu usage and runtime presence
+        // Only low host-cpu usage
+        $balancer1->addFilter(function ($option) {
+            return ($option->getState('usage', 100)) < 80;
+        });
 
-        // 1. online executor with runtime present
-        // Typical execution scenario routing all requests for 1 runtime to same executor
-        $balancer1 = new Balancer($algorithm);
-        $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
+        // Only low runtime-cpu usage
         if (!empty($runtimeId)) {
             $balancer1->addFilter(function ($option) use ($runtimeId) {
-                /**
-                 * @var array<string,mixed> $state
-                 */
-                $state = \json_decode($option->getState('state', '{}'), true);
-
-                /**
-                 * @var array<string,mixed> $runtimes
-                 */
-                $runtimes = $state['runtimes'] ?? [];
-
-                return \array_key_exists($runtimeId, $runtimes);
+                $runtimes = $option->getState('runtimes', []);
+                $runtime = $runtimes[$runtimeId] ?? [];
+                return ($runtime['usage'] ?? 100) < 80;
             });
         }
 
-        // 2. online executors; low executor CPU usage
-        // Execution with cold-start that prefers executors with less load
+        // Any options
         $balancer2 = new Balancer($algorithm);
         $balancer2->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
-        $balancer2->addFilter(function ($option) {
-            /**
-             * @var array<string,mixed> $state
-             */
-            $state = \json_decode($option->getState('state', '{}'), true);
-            return ($state['usage'] ?? 100) < 80;
-        });
-
-        // 3. online executors
-        // Execution with cold-start in case all executors are overworked
-        $balancer3 = new Balancer($algorithm);
-        $balancer3->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
-
-        // 4. any executor
-        // Downtime scenario. Everything will fail, but we need to route it somewhere
-        $balancer4 = new Balancer($algorithm);
-
-        $balancers[] = $balancer1;
-        $balancers[] = $balancer2;
-        $balancers[] = $balancer3;
-        $balancers[] = $balancer4;
-    } elseif ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
-        // Best end-user performance spreading cross across all executor, causing a lot of resource usage
-        $algorithm = new Random();
-
-        // 1. online executor
-        // Typical execution scenario routing randomy between all executors
-        $balancer1 = new Balancer($algorithm);
-        $balancer1->addFilter(fn ($option) => $option->getState('status', 'offline') === 'online');
-
-        // 2. any executor
-        // Downtime scenario. Everything will fail, but we need to route it somewhere
-        $balancer2 = new Balancer($algorithm);
-
-        $balancers[] = $balancer1;
-        $balancers[] = $balancer2;
-    } else {
-        // No special behaviour
-        $balancer1 = new Balancer($algorithm);
-        $balancers[] = $balancer1;
     }
-
-    foreach ($containers as $stateItem) {
-        /**
-         * @var array<string,mixed> $stateItem
-         */
+    foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
+        $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname);
 
         if (Http::isDevelopment()) {
-            Console::log("Adding balancing option: " . \json_encode($stateItem));
+            Console::log("Updated balancing option '" . $hostname . "' with ". \count($executor['runtimes'])." runtimes: " . \json_encode($executor));
         }
 
-        foreach ($balancers as $balancer) {
-            $balancer->addOption(new Option($stateItem));
+        $executor['hostname'] = $hostname;
+
+        $balancer1->addOption(new Option($executor));
+        if (isset($balancer2)) {
+            $balancer2->addOption(new Option($executor));
         }
     }
 
-    $group = new Group();
-    foreach ($balancers as $balancer) {
-        $group->add($balancer);
+    $group->add($balancer1);
+
+    if (isset($balancer2)) {
+        $group->add($balancer2);
     }
 
     return $group;
-}, ['algorithm', 'request', 'containers']);
+}, ['algorithm', 'request', 'state']);
 
-$healthCheck = function (bool $forceShowError = false) use ($register): void {
-    $containers = $register->get('containers');
+$healthCheck = function (State $state, bool $firstCheck = false) use ($register): void {
     $logger = $register->get('logger');
-
-    $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
+    $executors = $state->list(RESOURCE_EXECUTORS);
 
     $health = new Health();
-
-    foreach ($executors as $executor) {
-        $health->addNode(new Node($executor));
+    foreach (\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')) as $hostname) {
+        $health->addNode(new Node($hostname));
     }
 
-    $nodes = $health
-        ->run()
-        ->getNodes();
-
     $healthy = true;
-
-    foreach ($nodes as $node) {
-        $status = $node->isOnline() ? 'online' : 'offline';
+    foreach ($health->run()->getNodes() as $node) {
         $hostname = $node->getHostname();
+        $executor = $executors[$hostname] ?? [];
+        $newStatus = $node->isOnline() ? 'online' : 'offline';
 
-        $oldState = $containers->exists($hostname) ? $containers->get($hostname) : null;
-        $oldStatus = null;
-        if (isset($oldState) && is_array($oldState)) {
-            $oldStatus = $oldState['status'] ?? null;
-        }
-
-        if ($forceShowError === true || $oldStatus !== $status) {
-            if ($status === 'online') {
-                $message = 'Executor "' . $node->getHostname() . '" went online.';
-                Console::success($message);
+        if ($firstCheck || Http::isDevelopment() || $executor['status'] !== $newStatus) {
+            if ($newStatus === 'online') {
+                Console::info('Executor "' . $hostname . '" went online');
             } else {
                 $message = $node->getState()['message'] ?? 'Unexpected error.';
-                $message = 'Executor "' . $node->getHostname() . '" went offline: ' . $message;
-                $error = new Exception($message, 500);
+                $error = new Exception('Executor "' . $hostname . '" went offline: ' . $message, 500);
                 logError($error, "healthCheckError", $logger, null);
             }
         }
 
-        if ($status === 'offline') {
+        if (!$node->isOnline()) {
             $healthy = false;
         }
 
-        $containers->set($node->getHostname(), [
-            'status' => $status,
-            'hostname' => $hostname,
-            'state' => \json_encode($node->getState())
-        ]);
+        $state->save(
+            resource: RESOURCE_EXECUTORS,
+            name: $hostname,
+            status: $node->isOnline() ? 'online' : 'offline',
+            usage: $node->getState()['usage'] ?? 0
+        );
+
+        $runtimes = [];
+
+        Console::log('Executor "' . $hostname . '" healthcheck returned ' . \count($node->getState()['runtimes'] ?? []) . ' runtimes');
+        foreach ($node->getState()['runtimes'] ?? [] as $runtimeId => $runtime) {
+            if (!\is_string($runtimeId) || !\is_array($runtime)) {
+                Console::warning('Invalid runtime data for ' . $hostname . ' runtime ' . $runtimeId);
+                continue;
+            }
+
+            $runtimes[$runtimeId] = [
+                'status' => $runtime['status'] ?? 'offline',
+                'usage' => $runtime['usage'] ?? 100,
+            ];
+        }
+        $state->saveAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
     }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
         try {
-            Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') ?? '');
+            Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL') ?? '');
         } catch (\Throwable $th) {
             logError($th, 'healthCheckError', $logger, null);
         }
@@ -317,6 +294,10 @@ function logError(Throwable $error, string $action, ?Logger $logger, Route $rout
 Http::init()
     ->inject('request')
     ->action(function (Request $request) {
+        if ($request->getURI() === '/v1/proxy/health') {
+            return;
+        }
+
         $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
 
         if (empty($secretKey) || $secretKey !== Http::getEnv('OPR_PROXY_SECRET', '')) {
@@ -336,11 +317,11 @@ Http::wildcard()
     ->inject('balancer')
     ->inject('request')
     ->inject('response')
-    ->inject('containers')
-    ->action(function (Group $balancer, Request $request, SwooleResponse $response, Table $containers) {
+    ->inject('state')
+    ->action(function (Group $balancer, Request $request, SwooleResponse $response, State $state) {
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $containers) {
+        $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $state) {
             if (Http::isDevelopment()) {
                 Console::info("Executing on " . $hostname);
             }
@@ -349,23 +330,7 @@ Http::wildcard()
             // Next health check with confirm it started well, and update usage stats
             $runtimeId = $request->getHeader('x-opr-runtime-id', '');
             if (!empty($runtimeId)) {
-                $record = $containers->get($hostname);
-
-                $stateItem = \json_decode($record['state'] ?? '{}', true);
-
-                if (!isset($stateItem['runtimes'])) {
-                    $stateItem['runtimes'] = [];
-                }
-
-                if (!isset($stateItem['runtimes'][$runtimeId])) {
-                    $stateItem['runtimes'][$runtimeId] = [];
-                }
-
-                $stateItem['runtimes'][$runtimeId]['usage'] = 0;
-
-                $record['state'] = \json_encode($stateItem);
-
-                $containers->set($hostname, $record);
+                $state->save(RESOURCE_RUNTIMES . $hostname, $runtimeId, 'pass', 0);
             }
 
             $headers = \array_merge($request->getHeaders(), [
@@ -374,9 +339,7 @@ Http::wildcard()
 
             // Header used for testing
             if (Http::isDevelopment()) {
-                $headers = \array_merge($headers, [
-                    'x-opr-executor-hostname' => $hostname
-                ]);
+                $headers['x-opr-executor-hostname'] = $hostname;
             }
 
             $body = $request->getRawPayload();
@@ -580,27 +543,7 @@ Http::error()
         $response->json($output);
     });
 
-// If no health check, mark all as online
-if (Http::getEnv('OPR_PROXY_HEALTHCHECK', 'enabled') === 'disabled') {
-    $executors = \explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', ''));
-
-    foreach ($executors as $executor) {
-        $containers = $register->get('containers');
-        $containers->set($executor, [
-            'status' => 'online',
-            'hostname' => $executor,
-            'state' =>  \json_encode([])
-        ]);
-    }
-}
-
 run(function () use ($healthCheck) {
-    // Initial health check + start timer
-    $healthCheck(true);
-
-    $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(false));
-
     $payloadSize = 22 * (1024 * 1024);
 
     $settings = [
@@ -609,6 +552,12 @@ run(function () use ($healthCheck) {
     ];
     // Start HTTP server
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
+
+    $state = createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
+    $healthCheck($state, true);
+
+    $defaultInterval = '10000'; // 10 seconds
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck($state, false));
 
     Console::success('Functions proxy is ready.');
 

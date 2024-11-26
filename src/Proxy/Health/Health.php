@@ -59,7 +59,7 @@ class Health
                         $node->setOnline(true);
                         $node->setState(\json_decode($executorResponse, true) ?: []);
                     } else {
-                        $message = 'Code: ' . $statusCode . ' with response "' . $executorResponse .  '" and error error: ' . $error;
+                        $message = 'Code: ' . $statusCode . ' with response "' . $executorResponse .  '" and error: ' . $error;
                         $node->setOnline(false);
                         $node->setState([ 'message' => $message ]);
                     }
