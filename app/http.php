@@ -2,19 +2,13 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use OpenRuntimes\State\Adapter\Redis as RedisAdapter;
-use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterAdapter;
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
+use OpenRuntimes\State\Adapter\Redis as RedisAdapter;
+use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterAdapter;
 use OpenRuntimes\State\State;
 use Swoole\Runtime;
 use Swoole\Timer;
-use Utopia\Logger\Log;
-use Utopia\Logger\Logger;
-use Utopia\Logger\Adapter\AppSignal;
-use Utopia\Logger\Adapter\LogOwl;
-use Utopia\Logger\Adapter\Raygun;
-use Utopia\Logger\Adapter\Sentry;
 use Utopia\Balancer\Algorithm;
 use Utopia\Balancer\Algorithm\First;
 use Utopia\Balancer\Algorithm\Last;
@@ -26,14 +20,22 @@ use Utopia\Balancer\Option;
 use Utopia\CLI\Console;
 use Utopia\DSN\DSN;
 use Utopia\Fetch\Client;
+use Utopia\Http\Adapter\Swoole\Response as SwooleResponse;
 use Utopia\Http\Adapter\Swoole\Server;
 use Utopia\Http\Http;
 use Utopia\Http\Request;
 use Utopia\Http\Response;
-use Utopia\Http\Adapter\Swoole\Response as SwooleResponse;
 use Utopia\Http\Route;
+use Utopia\Logger\Adapter\AppSignal;
+use Utopia\Logger\Adapter\LogOwl;
+use Utopia\Logger\Adapter\Raygun;
+use Utopia\Logger\Adapter\Sentry;
+use Utopia\Logger\Log;
+use Utopia\Logger\Logger;
 use Utopia\Registry\Registry;
-
+use Utopia\Telemetry\Adapter as Telemetry;
+use Utopia\Telemetry\Adapter\None as NoTelemetry;
+use Utopia\Telemetry\Adapter\OpenTelemetry;
 use function Swoole\Coroutine\run;
 
 // Unlimited memory limit to handle as many coroutines/requests as possible
@@ -133,11 +135,12 @@ Http::setResource('algorithm', fn () => $register->get('algorithm'));
 Http::setResource('state', fn () => createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? ''));
 
 // Balancer must NOT be registry. This has to run on every request
-Http::setResource('balancer', function (Algorithm $algorithm, Request $request, State $state) {
+Http::setResource('balancer', function (Algorithm $algorithm, Request $request, State $state, Telemetry $telemetry) {
     $runtimeId = $request->getHeader('x-opr-runtime-id', '');
     $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
     $group = new Group();
+    $group->setTelemetry($telemetry);
 
     if ($method === ADDRESSING_METHOD_ANYCAST_FAST) {
         $algorithm = new Random();
@@ -190,7 +193,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     }
 
     return $group;
-}, ['algorithm', 'request', 'state']);
+}, ['algorithm', 'request', 'state', 'telemetry']);
 
 $healthCheck = function (State $state, bool $firstCheck = false) use ($register): void {
     $logger = $register->get('logger');
@@ -318,10 +321,11 @@ Http::wildcard()
     ->inject('request')
     ->inject('response')
     ->inject('state')
-    ->action(function (Group $balancer, Request $request, SwooleResponse $response, State $state) {
+    ->inject('telemetry')
+    ->action(function (Group $balancer, Request $request, SwooleResponse $response, State $state, Telemetry $telemetry) {
         $method = $request->getHeader('x-opr-addressing-method', ADDRESSING_METHOD_ANYCAST_EFFICIENT);
 
-        $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $state) {
+        $proxyRequest = function (string $hostname, ?SwooleResponse $response = null) use ($request, $state, $telemetry) {
             if (Http::isDevelopment()) {
                 Console::info("Executing on " . $hostname);
             }
@@ -431,12 +435,22 @@ Http::wildcard()
             \curl_setopt($ch, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED);
             \curl_setopt($ch, CURLOPT_HTTPHEADER, $curlHeaders);
 
+            $start = microtime(true);
             \curl_exec($ch);
+            $end = microtime(true);
+
             $statusCode = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $error = \curl_error($ch);
             $errNo = \curl_errno($ch);
 
             \curl_close($ch);
+
+            $telemetry
+                ->createHistogram('http.client.request.duration', 's', null, ['ExplicitBucketBoundaries' => [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10]])
+                ->record($end - $start, [
+                    'server.address' => $hostname,
+                    'http.response.status_code' => $statusCode,
+                ]);
 
             if ($errNo !== 0) {
                 if ($response !== null) {
@@ -543,6 +557,13 @@ Http::error()
         $response->json($output);
     });
 
+function setupTelemetry(): Utopia\Telemetry\Adapter
+{
+    $endpoint = Http::getEnv('OPR_PROXY_TELEMETRY_ENDPOINT_METRICS');
+    $serviceInstanceId = gethostname();
+    return $endpoint !== null ? new OpenTelemetry($endpoint, 'open-runtimes', 'proxy', $serviceInstanceId) : new NoTelemetry();
+}
+
 run(function () use ($healthCheck) {
     $payloadSize = 22 * (1024 * 1024);
 
@@ -558,6 +579,10 @@ run(function () use ($healthCheck) {
 
     $defaultInterval = '10000'; // 10 seconds
     Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck($state, false));
+
+    $telemetry = setupTelemetry();
+    Http::setResource('telemetry', fn () => $telemetry);
+    Timer::tick(60_000, fn () => $telemetry->collect());
 
     Console::success('Functions proxy is ready.');
 
