@@ -377,61 +377,87 @@ Http::init()
         }
     });
 
-Http::get('/v1/proxy/health')
-    ->inject('response')
-    ->action(function (Response $response) {
-        $response
-            ->setStatusCode(200)
-            ->send('OK');
-    });
-
 Http::get('/v1/debug/redis-perf')
     ->inject('state')
     ->inject('response')
     ->action(function (State $state, Response $response) {
         $results = [];
         
-        $start = microtime(true);
+        // hrtime returns nanoseconds, convert to ms by dividing by 1e6
+        $start = hrtime(true);
         
-        // Get list of executors
+        // Get list of executors with timing
+        $executorStart = hrtime(true);
         $executors = $state->list(RESOURCE_EXECUTORS);
-        $executorTime = microtime(true);
-        $results['executor_query_time'] = ($executorTime - $start) * 1000;
-
-        // Get all runtimes at once
-        $runtimeStart = microtime(true);
+        $results['executor_query_time_ms'] = (hrtime(true) - $executorStart) / 1e6;
+        
+        // Get all runtimes with timing
+        $runtimeStart = hrtime(true);
         $allRuntimes = $state->list(RESOURCE_RUNTIMES);
-
-        // Group runtimes by executor
+        $results['runtime_query_time_ms'] = (hrtime(true) - $runtimeStart) / 1e6;
+        
+        // Process runtimes with timing
+        $processingStart = hrtime(true);
+        
+        // Group runtimes by executor using more efficient array operations
         $runtimesByExecutor = [];
         foreach ($allRuntimes as $key => $value) {
-            [$host, $runtimeId] = explode('/', $key, 2);
-            if (!isset($runtimesByExecutor[$host])) {
-                $runtimesByExecutor[$host] = [];
+            $parts = explode('/', $key, 2);
+            if (count($parts) !== 2) {
+                continue; // Skip invalid entries
             }
+            [$host, $runtimeId] = $parts;
             $runtimesByExecutor[$host][$runtimeId] = $value;
         }
-
-        // Calculate runtime sizes
-        $results['runtime_sizes'] = [];
-        foreach ($executors as $hostname => $executor) {
-            $results['runtime_sizes'][$hostname] = isset($runtimesByExecutor[$hostname]) ? count($runtimesByExecutor[$hostname]) : 0;
-        }
-
-        $results['individual_runtimes_time'] = (microtime(true) - $runtimeStart) * 1000;
-        $results['total_n_plus_1_time'] = (microtime(true) - $start) * 1000;
-        $results['total_runtimes'] = array_sum($results['runtime_sizes']);
         
-        // Collect stats
+        // Calculate runtime sizes with memory optimization
+        $results['runtime_sizes'] = array_map(function($executorRuntimes) {
+            return is_array($executorRuntimes) ? count($executorRuntimes) : 0;
+        }, $runtimesByExecutor);
+        
+        // Add missing executors with zero runtimes
+        foreach ($executors as $hostname => $_) {
+            if (!isset($results['runtime_sizes'][$hostname])) {
+                $results['runtime_sizes'][$hostname] = 0;
+            }
+        }
+        
+        $results['processing_time_ms'] = (hrtime(true) - $processingStart) / 1e6;
+        
+        // Calculate comprehensive statistics
+        $results['total_time_ms'] = (hrtime(true) - $start) / 1e6;
+        $results['total_runtimes'] = array_sum($results['runtime_sizes']);
         $results['executor_count'] = count($executors);
-        $results['avg_runtimes_per_executor'] = $results['executor_count'] > 0 ? ($results['total_runtimes'] / $results['executor_count']) : 0;
-
+        
+        // Avoid division by zero and ensure floating-point division
+        $results['avg_runtimes_per_executor'] = $results['executor_count'] > 0 
+            ? ($results['total_runtimes'] / (float)$results['executor_count']) 
+            : 0.0;
+            
+        // Add memory usage statistics in bytes
+        $results['memory_bytes'] = [
+            'current' => memory_get_usage(false),
+            'peak' => memory_get_peak_usage(false),
+            'current_real' => memory_get_usage(true),
+            'peak_real' => memory_get_peak_usage(true)
+        ];
+        
+        // Calculate timing percentages relative to total time
+        $totalTimeMs = $results['total_time_ms'];
+        if ($totalTimeMs > 0) {
+            $results['timing_breakdown_percent'] = [
+                'executor_query' => ($results['executor_query_time_ms'] / $totalTimeMs) * 100,
+                'runtime_query' => ($results['runtime_query_time_ms'] / $totalTimeMs) * 100,
+                'processing' => ($results['processing_time_ms'] / $totalTimeMs) * 100
+            ];
+        }
+        
         $response->json([
             'success' => true,
-            'stats' => $results
+            'stats' => $results,
+            'timestamp_ms' => round(microtime(true) * 1000) // Unix timestamp in milliseconds
         ]);
     });
-
 
 Http::wildcard()
     ->inject('balancer')

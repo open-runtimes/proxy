@@ -30,15 +30,6 @@ class CachedState implements State
     public function list(string $resource): array
     {
         $entries = $this->cache->getAll($resource);
-
-        if (empty($entries)) {
-            // Refresh from state
-            $entries = $this->state->list($resource);
-            if (!empty($entries)) {
-                $this->cache->setAll($resource, $entries, $this->ttl);
-            }
-        }
-
         return $entries;
     }
 
