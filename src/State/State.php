@@ -36,6 +36,16 @@ interface State
     public function saveAll(string $resource, array $entries): bool;
 
     /**
+     * Remove resource
+     *
+     * @param  string  $resource
+     * @param  string  $name
+     *
+     * @return bool
+     */
+    public function remove(string $resource, string $name): bool;
+
+    /**
      * Purge executors
      *
      * @return bool

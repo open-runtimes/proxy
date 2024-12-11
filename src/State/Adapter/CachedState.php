@@ -51,6 +51,16 @@ class CachedState implements State
         return $success;
     }
 
+    public function remove(string $resource, string $name): bool
+    {
+        $success = $this->state->remove($resource, $name);
+        if ($success) {
+            // Remove from cache
+            $this->cache->delete($resource . ':' . $name);
+        }
+        return $success;
+    }
+
     public function flush(): bool
     {
         $success = $this->state->flush();

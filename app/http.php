@@ -47,7 +47,7 @@ const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
 const ADDRESSING_METHOD_BROADCAST = 'broadcast';
 
 const RESOURCE_EXECUTORS = '{executors}';
-const RESOURCE_RUNTIMES = '{executors-runtimes}:';
+const RESOURCE_RUNTIMES = '{runtimes}';
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
@@ -215,8 +215,21 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
         $balancers[] = $balancer;
     }
 
-    foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
-        $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname); // TODO: Avoid those extra Redis calls
+    $executors = $state->list(RESOURCE_EXECUTORS);
+    $allRuntimes = $state->list(RESOURCE_RUNTIMES);
+
+    // Group runtimes by executor
+    $runtimesByExecutor = [];
+    foreach ($allRuntimes as $key => $value) {
+        [$host, $runtimeId] = explode('/', $key, 2);
+        if (!isset($runtimesByExecutor[$host])) {
+            $runtimesByExecutor[$host] = [];
+        }
+        $runtimesByExecutor[$host][$runtimeId] = $value;
+    }
+
+    foreach ($executors as $hostname => $executor) {
+        $executor['runtimes'] = $runtimesByExecutor[$hostname] ?? [];
         $executor['hostname'] = $hostname;
 
         if (Http::isDevelopment()) {
@@ -273,21 +286,32 @@ $healthCheck = function (bool $firstCheck = false) use ($register): void {
             usage: $node->getState()['usage'] ?? 0
         );
 
-        $runtimes = [];
+        $allCurrentRuntimes = $state->list(RESOURCE_RUNTIMES);
 
-        Console::log('Executor "' . $hostname . '" healthcheck returned ' . \count($node->getState()['runtimes'] ?? []) . ' runtimes');
-        foreach ($node->getState()['runtimes'] ?? [] as $runtimeId => $runtime) {
-            if (!\is_string($runtimeId) || !\is_array($runtime)) {
-                Console::warning('Invalid runtime data for ' . $hostname . ' runtime ' . $runtimeId);
-                continue;
+        // Collect all new runtimes
+        $newRuntimes = [];
+        foreach ($health->getNodes() as $node) {
+            $hostname = $node->getHostname();
+            $reportedRuntimes = $node->getState()['runtimes'] ?? [];
+
+            foreach ($reportedRuntimes as $runtimeId => $runtime) {
+                $newRuntimes[$hostname . '/' . $runtimeId] = [
+                    'status' => $runtime['status'] ?? 'offline',
+                    'usage' => $runtime['usage'] ?? 100,
+                ];
             }
-
-            $runtimes[$runtimeId] = [
-                'status' => $runtime['status'] ?? 'offline',
-                'usage' => $runtime['usage'] ?? 100,
-            ];
         }
-        $state->saveAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
+
+        // Remove outdated runtimes not present in latest healthcheck
+        foreach (array_keys($allCurrentRuntimes) as $existingKey) {
+            if (!isset($newRuntimes[$existingKey])) {
+                // This runtime was not reported by the current healthcheck, remove it
+                [$host, $runtimeId] = explode('/', $existingKey, 2);
+                $state->remove(RESOURCE_RUNTIMES, $host . '/' . $runtimeId);
+            }
+        }
+
+        $state->saveAll(RESOURCE_RUNTIMES, $newRuntimes);
     }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
@@ -339,6 +363,9 @@ function logError(Throwable $error, string $action, ?Logger $logger, Route $rout
 Http::init()
     ->inject('request')
     ->action(function (Request $request) {
+        if (Http::isDevelopment()) {
+            Console::log('[DEBUG] Starting request: ' . $request->getMethod() . ' ' . $request->getURI() . ' at ' . microtime(true));
+        }
         if ($request->getURI() === '/v1/proxy/health' || $request->getURI() === '/v1/debug/redis-perf') {
             return;
         }
@@ -364,33 +391,47 @@ Http::get('/v1/debug/redis-perf')
     ->action(function (State $state, Response $response) {
         $results = [];
         
-        // Start timing current approach (N+1 queries)
         $start = microtime(true);
         
         // Get list of executors
         $executors = $state->list(RESOURCE_EXECUTORS);
         $executorTime = microtime(true);
         $results['executor_query_time'] = ($executorTime - $start) * 1000;
-        
-        // Get runtime info for each executor
+
+        // Get all runtimes at once
         $runtimeStart = microtime(true);
-        foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
-            $runtimes = $state->list(RESOURCE_RUNTIMES . $hostname);
-            $results['runtime_sizes'][$hostname] = count($runtimes);
+        $allRuntimes = $state->list(RESOURCE_RUNTIMES);
+
+        // Group runtimes by executor
+        $runtimesByExecutor = [];
+        foreach ($allRuntimes as $key => $value) {
+            [$host, $runtimeId] = explode('/', $key, 2);
+            if (!isset($runtimesByExecutor[$host])) {
+                $runtimesByExecutor[$host] = [];
+            }
+            $runtimesByExecutor[$host][$runtimeId] = $value;
         }
+
+        // Calculate runtime sizes
+        $results['runtime_sizes'] = [];
+        foreach ($executors as $hostname => $executor) {
+            $results['runtime_sizes'][$hostname] = isset($runtimesByExecutor[$hostname]) ? count($runtimesByExecutor[$hostname]) : 0;
+        }
+
         $results['individual_runtimes_time'] = (microtime(true) - $runtimeStart) * 1000;
         $results['total_n_plus_1_time'] = (microtime(true) - $start) * 1000;
         $results['total_runtimes'] = array_sum($results['runtime_sizes']);
         
         // Collect stats
         $results['executor_count'] = count($executors);
-        $results['avg_runtimes_per_executor'] = $results['total_runtimes'] / max(1, count($executors));
-        
+        $results['avg_runtimes_per_executor'] = $results['executor_count'] > 0 ? ($results['total_runtimes'] / $results['executor_count']) : 0;
+
         $response->json([
             'success' => true,
             'stats' => $results
         ]);
     });
+
 
 Http::wildcard()
     ->inject('balancer')
@@ -625,11 +666,16 @@ Http::error()
 run(function () use ($healthCheck) {
     $payloadSize = 22 * (1024 * 1024);
 
+    $workerPerCore = (int) (getenv('OPR_PROXY_WORKER_PER_CORE') ?: 6);
+    $cpuCores = swoole_cpu_num();
+
     $settings = [
         'package_max_length' => $payloadSize,
         'buffer_output_size' => $payloadSize,
+        'worker_num' => $cpuCores * $workerPerCore,
     ];
     // Start HTTP server
+
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
 
     $healthCheck(true);

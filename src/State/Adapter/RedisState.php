@@ -64,6 +64,11 @@ class RedisState implements State
         return $results !== false;
     }
 
+    public function remove(string $resource, string $name): bool
+    {
+        return (bool)$this->redis->hDel($resource, $name);
+    }
+
     public function flush(): bool
     {
         return $this->redis->flushAll();

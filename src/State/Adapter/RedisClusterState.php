@@ -67,6 +67,11 @@ class RedisClusterState implements State
         return true;
     }
 
+    public function remove(string $resource, string $name): bool
+    {
+        return (bool)$this->redisCluster->hDel($resource, $name);
+    }
+
     public function flush(): bool
     {
         foreach ($this->redisCluster->_masters() as $master) {
