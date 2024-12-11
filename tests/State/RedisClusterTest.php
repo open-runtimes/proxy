@@ -3,8 +3,7 @@
 namespace Tests\State;
 
 use RedisCluster as RedisCluster;
-use OpenRuntimes\State\Adapter\RedisCluster as RedisAdapter;
-use OpenRuntimes\State\State;
+use OpenRuntimes\State\Adapter\RedisClusterState as RedisClusterState;
 
 class RedisClusterTest extends Base
 {
@@ -13,7 +12,7 @@ class RedisClusterTest extends Base
     public static function setUpBeforeClass(): void
     {
         self::$redis = new RedisCluster(null, ['redis-cluster-0:6379', 'redis-cluster-1:6379', 'redis-cluster-2:6379']);
-        self::$state = new State(new RedisAdapter(self::$redis));
+        self::$state = new RedisClusterState(self::$redis);
     }
 
     public static function tearDownAfterClass(): void
