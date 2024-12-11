@@ -2,12 +2,15 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use OpenRuntimes\State\Adapter\Redis as RedisAdapter;
-use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterAdapter;
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
+use OpenRuntimes\State\Adapter\CachedState;
+use OpenRuntimes\State\Adapter\RedisClusterState;
+use OpenRuntimes\State\Adapter\RedisState;
+use OpenRuntimes\State\Cache;
 use OpenRuntimes\State\State;
 use Swoole\Runtime;
+use Swoole\Table;
 use Swoole\Timer;
 use Utopia\Logger\Log;
 use Utopia\Logger\Logger;
@@ -50,26 +53,19 @@ Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
 Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION));
 
+$cacheTable = new Table(65536);
+$cacheTable->column('status', Table::TYPE_STRING, 16);
+$cacheTable->column('usage', Table::TYPE_FLOAT);
+$cacheTable->column('expires_at', Table::TYPE_INT, 8);
+$cacheTable->create();
+
 // Setup Registry
 $register = new Registry();
 
-function createState(string $dsn): State
-{
-    $dsn = new DSN($dsn);
-
-    switch($dsn->getScheme()) {
-        case 'redis':
-            $redis = new Redis();
-            $redis->connect($dsn->getHost(), intval($dsn->getPort()));
-            return new State(new RedisAdapter($redis));
-        case 'redis-cluster':
-            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
-            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
-            return new State(new RedisClusterAdapter($redisCluster));
-        default:
-            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
-    }
-}
+// Store it in the registry
+$register->set('cache', function() use ($cacheTable) {
+    return new Cache($cacheTable);
+});
 
 /**
  * Create logger for cloud logging
@@ -127,10 +123,47 @@ $register->set('algorithm', function () {
     return $algo;
 });
 
+$register->set('state', function () use ($register) {
+    $connectionString = Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '');
+    if (empty($connectionString)) {
+        throw new Exception("No state DSN provided.");
+    }
+
+    $dsn = new DSN($connectionString);
+
+    switch($dsn->getScheme()) {
+        case 'redis':
+            $redis = new Redis();
+            $redis->connect($dsn->getHost(), (int) $dsn->getPort());
+            $state = new RedisState($redis);
+            break;
+        case 'redis-cluster':
+            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
+            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
+            $state = new RedisClusterState($redisCluster);
+            break;
+        default:
+            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
+    }
+
+    return $state;
+}, fresh: true);
+
+$register->set('cachedState', function () use ($register) {
+    $state = $register->get('state');
+    $cache = $register->get('cache');
+    
+    $ttl = 15; 
+
+    $cache = $register->get('cache');
+    return new CachedState($state, $cache, $ttl);
+}, fresh: true);
+    
+
 // Setup Resources
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
-Http::setResource('state', fn () => createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? ''));
+Http::setResource('state', fn () => $register->get('cachedState'));
 
 // Balancer must NOT be registry. This has to run on every request
 Http::setResource('balancer', function (Algorithm $algorithm, Request $request, State $state) {
@@ -203,8 +236,9 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     return $group;
 }, ['algorithm', 'request', 'state']);
 
-$healthCheck = function (State $state, bool $firstCheck = false) use ($register): void {
+$healthCheck = function (bool $firstCheck = false) use ($register): void {
     $logger = $register->get('logger');
+    $state = $register->get('state');
     $executors = $state->list(RESOURCE_EXECUTORS);
 
     $health = new Health();
@@ -305,7 +339,7 @@ function logError(Throwable $error, string $action, ?Logger $logger, Route $rout
 Http::init()
     ->inject('request')
     ->action(function (Request $request) {
-        if ($request->getURI() === '/v1/proxy/health') {
+        if ($request->getURI() === '/v1/proxy/health' || $request->getURI() === '/v1/debug/redis-perf') {
             return;
         }
 
@@ -322,6 +356,40 @@ Http::get('/v1/proxy/health')
         $response
             ->setStatusCode(200)
             ->send('OK');
+    });
+
+Http::get('/v1/debug/redis-perf')
+    ->inject('state')
+    ->inject('response')
+    ->action(function (State $state, Response $response) {
+        $results = [];
+        
+        // Start timing current approach (N+1 queries)
+        $start = microtime(true);
+        
+        // Get list of executors
+        $executors = $state->list(RESOURCE_EXECUTORS);
+        $executorTime = microtime(true);
+        $results['executor_query_time'] = ($executorTime - $start) * 1000;
+        
+        // Get runtime info for each executor
+        $runtimeStart = microtime(true);
+        foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
+            $runtimes = $state->list(RESOURCE_RUNTIMES . $hostname);
+            $results['runtime_sizes'][$hostname] = count($runtimes);
+        }
+        $results['individual_runtimes_time'] = (microtime(true) - $runtimeStart) * 1000;
+        $results['total_n_plus_1_time'] = (microtime(true) - $start) * 1000;
+        $results['total_runtimes'] = array_sum($results['runtime_sizes']);
+        
+        // Collect stats
+        $results['executor_count'] = count($executors);
+        $results['avg_runtimes_per_executor'] = $results['total_runtimes'] / max(1, count($executors));
+        
+        $response->json([
+            'success' => true,
+            'stats' => $results
+        ]);
     });
 
 Http::wildcard()
@@ -564,11 +632,10 @@ run(function () use ($healthCheck) {
     // Start HTTP server
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
 
-    $state = createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
-    $healthCheck($state, true);
+    $healthCheck(true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck($state, false));
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(false));
 
     Console::success('Functions proxy is ready.');
 

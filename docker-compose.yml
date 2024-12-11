@@ -124,6 +124,33 @@ services:
     volumes:
       - ./mockoon.json:/data:ro
 
+  mockoon3:
+    container_name: mockoon3
+    image: mockoon/cli:2.2.1
+    command: mockoon-cli start --data /data
+    networks:
+      servers:
+    volumes:
+      - ./mockoon.json:/data:ro
+
+  mockoon4:
+    container_name: mockoon4
+    image: mockoon/cli:2.2.1
+    command: mockoon-cli start --data /data
+    networks:
+      servers:
+    volumes:
+      - ./mockoon.json:/data:ro
+
+  mockoon5:
+    container_name: mockoon5
+    image: mockoon/cli:2.2.1
+    command: mockoon-cli start --data /data
+    networks:
+      servers:
+    volumes:
+      - ./mockoon.json:/data:ro
+
 networks:
   servers:
 

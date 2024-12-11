@@ -15,7 +15,7 @@
             "responses": [
                 {
                     "uuid": "e69e9ba2-6392-4c05-b5c7-1e4a71d8a19b",
-                    "body": "{\n  \"status\": \"pass\",\n  \"usage\": {{int 0 100}},\n  \"runtimes\": {\n    {{#repeat 0 5 comma=true}}\n    \"runtime{{@index}}\": { \"status\":\"pass\", \"usage\":{{int 0 100}} }\n    {{/repeat}}\n  }\n}",
+                    "body": "{\n  \"status\": \"pass\",\n  \"usage\": {{int 0 100}},\n  \"runtimes\": {\n    {{#repeat 0 100 comma=true}}\n    \"runtime{{@index}}\": { \"status\":\"pass\", \"usage\":{{int 0 100}} }\n    {{/repeat}}\n  }\n}",
                     "latency": 0,
                     "statusCode": 200,
                     "label": "",
