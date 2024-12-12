@@ -27,12 +27,12 @@ class Redis implements State
             'usage' => $usage,
         ], JSON_THROW_ON_ERROR);
 
-        return $this->saveRaw($resource, $name, $string);
+        return $this->redis->hSet($resource, $name, $string) !== false;
     }
 
     public function list(string $resource): array
     {
-        $entries = $this->getAll($resource);
+        $entries = $this->redis->hGetAll($resource) ?: [];
         $objects = [];
         foreach ($entries as $key => $value) {
             $json = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
@@ -72,29 +72,5 @@ class Redis implements State
     public function flush(): bool
     {
         return $this->redis->flushAll();
-    }
-
-    /**
-     * Get all entries for a resource
-     *
-     * @param string $resource
-     * @return array<string,string>
-     */
-    private function getAll(string $resource): array
-    {
-        return $this->redis->hGetAll($resource) ?: [];
-    }
-
-    /**
-     * Save a single entry
-     *
-     * @param string $resource
-     * @param string $name
-     * @param string $data
-     * @return bool
-     */
-    private function saveRaw(string $resource, string $name, string $data): bool
-    {
-        return $this->redis->hSet($resource, $name, $data) !== false;
     }
 }
