@@ -224,7 +224,11 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
             } else {
                 $message = $node->getState()['message'] ?? 'Unexpected error.';
                 $error = new Exception('Executor "' . $hostname . '" went offline: ' . $message, 500);
-                logError($error, "healthCheckError", $logger, null);
+                try {
+                    logError($error, "healthCheckError", $logger, null);
+                } catch (Throwable) {
+                    Console::warning('Unable to send log message');
+                }
             }
         }
 
@@ -260,7 +264,11 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
         try {
             Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL') ?? '');
         } catch (\Throwable $th) {
-            logError($th, 'healthCheckError', $logger, null);
+            try {
+                logError($th, 'healthCheckError', $logger, null);
+            } catch (\Throwable) {
+                Console::warning('Unable to send log message');
+            }
         }
     }
 };
