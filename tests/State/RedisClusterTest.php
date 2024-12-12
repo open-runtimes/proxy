@@ -3,7 +3,7 @@
 namespace Tests\State;
 
 use RedisCluster as RedisCluster;
-use OpenRuntimes\State\Adapter\RedisClusterState as RedisClusterState;
+use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterState;
 
 class RedisClusterTest extends Base
 {

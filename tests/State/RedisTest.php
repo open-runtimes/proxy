@@ -4,7 +4,7 @@ namespace Tests\State;
 
 use OpenRuntimes\State\State;
 use Redis as Redis;
-use OpenRuntimes\State\Adapter\RedisState as RedisState;
+use OpenRuntimes\State\Adapter\Redis as RedisState;
 
 class RedisTest extends Base
 {
