@@ -3,19 +3,19 @@
 namespace OpenRuntimes\State\Adapter;
 
 use OpenRuntimes\State\State;
-use RedisCluster;
+use RedisCluster as Client;
 
-class RedisClusterState implements State
+class RedisCluster implements State
 {
     /**
-     * @var RedisCluster
+     * @var Client
      */
     private $redisCluster;
 
     /**
-     * @param RedisCluster $redisCluster
+     * @param Client $redisCluster
      */
-    public function __construct(RedisCluster $redisCluster)
+    public function __construct(Client $redisCluster)
     {
         $this->redisCluster = $redisCluster;
     }

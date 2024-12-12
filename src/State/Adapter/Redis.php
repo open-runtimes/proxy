@@ -3,18 +3,17 @@
 namespace OpenRuntimes\State\Adapter;
 
 use OpenRuntimes\State\State;
-use Redis;
-use RedisCluster;
+use Redis as Client;
 
-class RedisState implements State
+class Redis implements State
 {
     /**
-     * @var Redis|RedisCluster
+     * @var Client
      */
     private $redis;
 
     /**
-     * @param Redis|RedisCluster $redis
+     * @param Client $redis
      */
     public function __construct($redis)
     {
@@ -49,6 +48,7 @@ class RedisState implements State
     public function saveAll(string $resource, array $entries): bool
     {
         $pipeline = $this->redis->multi();
+
         foreach ($entries as $key => $value) {
             if (!isset($value['status'], $value['usage'])) {
                 continue;

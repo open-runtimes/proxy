@@ -4,13 +4,10 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
-use OpenRuntimes\State\Adapter\CachedState;
-use OpenRuntimes\State\Adapter\RedisClusterState;
-use OpenRuntimes\State\Adapter\RedisState;
-use OpenRuntimes\State\Cache;
+use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterState;
+use OpenRuntimes\State\Adapter\Redis as RedisState;
 use OpenRuntimes\State\State;
 use Swoole\Runtime;
-use Swoole\Table;
 use Swoole\Timer;
 use Utopia\Logger\Log;
 use Utopia\Logger\Logger;
@@ -53,19 +50,8 @@ Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
 Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION));
 
-$cacheTable = new Table(65536);
-$cacheTable->column('status', Table::TYPE_STRING, 16);
-$cacheTable->column('usage', Table::TYPE_FLOAT);
-$cacheTable->column('expires_at', Table::TYPE_INT, 8);
-$cacheTable->create();
-
 // Setup Registry
 $register = new Registry();
-
-// Store it in the registry
-$register->set('cache', function() use ($cacheTable) {
-    return new Cache($cacheTable);
-});
 
 /**
  * Create logger for cloud logging
@@ -149,21 +135,10 @@ $register->set('state', function () use ($register) {
     return $state;
 }, fresh: true);
 
-$register->set('cachedState', function () use ($register) {
-    $state = $register->get('state');
-    $cache = $register->get('cache');
-    
-    $ttl = 15; 
-
-    $cache = $register->get('cache');
-    return new CachedState($state, $cache, $ttl);
-}, fresh: true);
-    
-
 // Setup Resources
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
-Http::setResource('state', fn () => $register->get('cachedState'));
+Http::setResource('state', fn () => $register->get('state'));
 
 // Balancer must NOT be registry. This has to run on every request
 Http::setResource('balancer', function (Algorithm $algorithm, Request $request, State $state) {
@@ -377,6 +352,14 @@ Http::init()
         }
     });
 
+Http::get('/v1/proxy/health')
+    ->inject('response')
+    ->action(function (Response $response) {
+        $response
+            ->setStatusCode(200)
+            ->send('OK');
+    });
+
 Http::get('/v1/debug/redis-perf')
     ->inject('state')
     ->inject('response')
@@ -423,36 +406,8 @@ Http::get('/v1/debug/redis-perf')
         }
         
         $results['processing_time_ms'] = (hrtime(true) - $processingStart) / 1e6;
-        
-        // Calculate comprehensive statistics
-        $results['total_time_ms'] = (hrtime(true) - $start) / 1e6;
-        $results['total_runtimes'] = array_sum($results['runtime_sizes']);
-        $results['executor_count'] = count($executors);
-        
-        // Avoid division by zero and ensure floating-point division
-        $results['avg_runtimes_per_executor'] = $results['executor_count'] > 0 
-            ? ($results['total_runtimes'] / (float)$results['executor_count']) 
-            : 0.0;
-            
-        // Add memory usage statistics in bytes
-        $results['memory_bytes'] = [
-            'current' => memory_get_usage(false),
-            'peak' => memory_get_peak_usage(false),
-            'current_real' => memory_get_usage(true),
-            'peak_real' => memory_get_peak_usage(true)
-        ];
-        
-        // Calculate timing percentages relative to total time
-        $totalTimeMs = $results['total_time_ms'];
-        if ($totalTimeMs > 0) {
-            $results['timing_breakdown_percent'] = [
-                'executor_query' => ($results['executor_query_time_ms'] / $totalTimeMs) * 100,
-                'runtime_query' => ($results['runtime_query_time_ms'] / $totalTimeMs) * 100,
-                'processing' => ($results['processing_time_ms'] / $totalTimeMs) * 100
-            ];
-        }
-        
-        $response->json([
+
+        return $response->json([
             'success' => true,
             'stats' => $results,
             'timestamp_ms' => round(microtime(true) * 1000) // Unix timestamp in milliseconds
