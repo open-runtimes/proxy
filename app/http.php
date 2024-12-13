@@ -336,15 +336,9 @@ function logError(Throwable $error, string $action, ?Logger $logger, Route $rout
 }
 
 Http::init()
+    ->groups(['proxy'])
     ->inject('request')
     ->action(function (Request $request) {
-        if (Http::isDevelopment()) {
-            Console::log('[DEBUG] Starting request: ' . $request->getMethod() . ' ' . $request->getURI() . ' at ' . microtime(true));
-        }
-        if ($request->getURI() === '/v1/proxy/health' || $request->getURI() === '/v1/debug/redis-perf') {
-            return;
-        }
-
         $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
 
         if (empty($secretKey) || $secretKey !== Http::getEnv('OPR_PROXY_SECRET', '')) {
@@ -415,6 +409,7 @@ Http::get('/v1/debug/redis-perf')
     });
 
 Http::wildcard()
+    ->groups(['proxy'])
     ->inject('balancer')
     ->inject('request')
     ->inject('response')
