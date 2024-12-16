@@ -34,4 +34,25 @@ class HealthTest extends TestCase
             $this->assertArrayHasKey('status', $mockoonNode->getState());
         });
     }
+
+    public function testHealthWithCurlError(): void
+    {
+        run(function () {
+            $health = new Health();
+            
+            // Use invalid hostname that will trigger cURL error
+            $nodes = $health
+                ->addNode(new Node('invalid-host:1234'))
+                ->run()
+                ->getNodes();
+
+            $this->assertIsArray($nodes);
+            $this->assertCount(1, $nodes);
+
+            $node = $nodes[0];
+            $this->assertFalse($node->isOnline());
+            $this->assertArrayHasKey('message', $node->getState());
+            $this->assertStringContainsString('cURL error', $node->getState()['message']);
+        });
+    }
 }
