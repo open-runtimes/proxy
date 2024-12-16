@@ -72,7 +72,8 @@ class Health
                         $node->setState([ 'message' => $message ]);
                     }
                 } catch (\Exception $err) {
-                    throw $err;
+                    $node->setOnline(false);
+                    $node->setState([ 'message' => 'cURL error: ' . $err->getMessage() ]);
                 }
             };
         }
