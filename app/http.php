@@ -222,11 +222,13 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
     }
 
     $healthy = true;
+
     foreach ($health->run()->getNodes() as $node) {
         try {
             $hostname = $node->getHostname();
             $executor = $executors[$hostname] ?? [];
             $newStatus = $node->isOnline() ? 'online' : 'offline';
+            $healthy = $healthy && $node->isOnline();
             $shouldLog = $firstCheck || Http::isDevelopment() || $executor['status'] !== $newStatus;
 
             if ($node->isOnline() && $shouldLog) {
@@ -265,9 +267,10 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
 
             $state->setAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
         } catch (\Throwable $th) {
-            Console::warning('Health check failed for ' . $node->getHostname() . ': ' . $th->getMessage() . ' - removing from state');
-
             try {
+                $healthy = false;
+                Console::warning('Health check failed for ' . $node->getHostname() . ': ' . $th->getMessage() . ' - removing from state');
+
                 $state->set(RESOURCE_EXECUTORS, $node->getHostname(), 'offline', 100);
                 $state->setAll(RESOURCE_RUNTIMES . $node->getHostname(), []);
             } catch (\Throwable $th) {
@@ -342,6 +345,24 @@ Http::get('/v1/proxy/health')
         $response
             ->setStatusCode(200)
             ->send('OK');
+    });
+
+Http::get('/v1/proxy/stats') 
+    ->inject('response')
+    ->inject('state')
+    ->action(function (Response $response, State $state) {
+        $stats = [];
+        foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
+            $stats[$hostname] = [
+                'status' => $executor['status'],
+                'usage' => $executor['usage'],
+                'runtimes' => $state->list(RESOURCE_RUNTIMES . $hostname)
+            ];
+        }
+
+        $response
+            ->setStatusCode(200)
+            ->json($stats);
     });
 
 Http::wildcard()
