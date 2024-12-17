@@ -96,4 +96,17 @@ class HTTPTest extends TestCase
         $this->assertEquals(0, $headers['content-length']);
         $this->assertEquals('', $body);
     }
+
+    public function testErrorRecovery(): void
+    {
+        $response = $this->client->call(Client::METHOD_GET, '/v1/ping', [
+            'x-opr-simulate-error' => 'CURLE_COULDNT_CONNECT'
+        ]);
+        $this->assertEquals(500, $response['headers']['status-code']);
+
+        // Verify executor was marked offline
+        $statsResponse = $this->client->call(Client::METHOD_GET, '/v1/proxy/stats');
+        $this->assertEquals(200, $statsResponse['headers']['status-code']);
+        $this->assertArrayHasKey('offline', $statsResponse['body']);
+    }
 }

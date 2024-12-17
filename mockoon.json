@@ -60,6 +60,24 @@
             ],
             "enabled": true,
             "responseMode": null
+        },
+        {
+            "uuid": "error-simulation",
+            "method": "get",
+            "endpoint": "v1/ping",
+            "responses": [
+                {
+                    "statusCode": 503,
+                    "rules": [
+                        {
+                            "target": "header",
+                            "modifier": "x-opr-simulate-error",
+                            "value": "CURLE_COULDNT_CONNECT",
+                            "operator": "equals"
+                        }
+                    ]
+                }
+            ]
         }
     ],
     "proxyMode": false,
