@@ -92,6 +92,19 @@ class State
         );
     }
 
+    public function remove(string $resource, string $name): bool
+    {
+        return $this->adapter->remove(
+            key: $name,
+            hash: $resource
+        );
+    }
+
+    public function removeAll(string $resource): bool
+    {
+        return $this->adapter->removeAll($resource);
+    }
+
     /**
      * Purge executors
      *

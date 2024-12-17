@@ -154,4 +154,45 @@ abstract class Base extends TestCase
             ],
         ], self::$state->list($resourceNested . $resourceId));
     }
+
+    public function testRemoveAndRemoveAll() {
+        $resource = uniqid();
+
+        // test saving
+        $nameOne = uniqid();
+        $nameTwo = uniqid();
+
+        $entries = [
+            $nameOne => [
+                'status' => 'online',
+                'usage' => 100,
+            ],
+            $nameTwo => [
+                'status' => 'offline',
+                'usage' => 0,
+            ],
+        ];
+
+        $result = self::$state->saveAll($resource, $entries);
+        $this->assertEquals(true, $result);
+
+        $this->assertEquals($entries, self::$state->list($resource));
+
+        // test remove
+        $result = self::$state->remove($resource, $nameOne);
+        $this->assertEquals(true, $result);
+
+        $this->assertEquals([
+            $nameTwo => [
+                'status' => 'offline',
+                'usage' => 0,
+            ],
+        ], self::$state->list($resource));
+
+        // test remove all
+        $result = self::$state->removeAll($resource);
+        $this->assertEquals(true, $result);
+
+        $this->assertEquals([], self::$state->list($resource));
+    }
 }

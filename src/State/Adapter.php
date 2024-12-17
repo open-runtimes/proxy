@@ -26,6 +26,19 @@ interface Adapter
     public function getAll(string $hash): array;
 
     /**
+     * @param  string  $key
+     * @param  string  $hash
+     * @return bool
+     */
+    public function remove(string $key, string $hash): bool;
+
+    /**
+     * @param  string  $hash
+     * @return bool
+     */
+    public function removeAll(string $hash): bool;
+
+    /**
      * @return bool
      */
     public function flush(): bool;
