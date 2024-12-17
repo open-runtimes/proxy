@@ -453,24 +453,24 @@ Http::wildcard()
                 if ($response !== null) {
                     $response->end();
                 }
-        
+
                 if (in_array($errNo, [CURLE_COULDNT_RESOLVE_HOST, CURLE_COULDNT_CONNECT, CURLE_OPERATION_TIMEDOUT])) {
                     $state->remove(RESOURCE_EXECUTORS, $hostname);
                     $state->removeAll(RESOURCE_RUNTIMES . $hostname);
                     Console::error("Executor '$hostname' appears to be down (Error $errNo: $error). Removed from state.");
-                } else if (!empty($runtimeId) && in_array($errNo, [CURLE_RECV_ERROR, CURLE_SEND_ERROR, CURLE_GOT_NOTHING])) {
+                } elseif (!empty($runtimeId) && in_array($errNo, [CURLE_RECV_ERROR, CURLE_SEND_ERROR, CURLE_GOT_NOTHING])) {
                     $state->remove(RESOURCE_RUNTIMES . $hostname, $runtimeId);
                     Console::warning("Runtime '$runtimeId' on executor '$hostname' encountered an error (Error $errNo: $error). Removed from state.");
                 }
-        
+
                 throw new Exception("Unexpected curl error between proxy and executor '$hostname' ($errNo): $error");
             }
-        
+
             if ($response !== null) {
                 foreach ($responseHeaders as $key => $value) {
                     $response->addHeader($key, $value);
                 }
-        
+
                 $response->setStatusCode($statusCode);
                 $response->end();
             }

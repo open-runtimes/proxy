@@ -155,7 +155,8 @@ abstract class Base extends TestCase
         ], self::$state->list($resourceNested . $resourceId));
     }
 
-    public function testRemoveAndRemoveAll() {
+    public function testRemoveAndRemoveAll()
+    {
         $resource = uniqid();
 
         // test saving
