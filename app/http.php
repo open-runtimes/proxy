@@ -214,7 +214,6 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
 $healthCheck = function (bool $firstCheck = false) use ($register): void {
     $logger = $register->get('logger');
     $state = $register->get('state');
-    $executors = $state->list(RESOURCE_EXECUTORS);
 
     $health = new Health();
     foreach (\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')) as $hostname) {
@@ -222,7 +221,7 @@ $healthCheck = function (bool $firstCheck = false) use ($register): void {
     }
 
     $healthy = true;
-
+    $executors = $state->list(RESOURCE_EXECUTORS);
     foreach ($health->run()->getNodes() as $node) {
         try {
             $hostname = $node->getHostname();
