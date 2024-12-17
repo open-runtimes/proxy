@@ -347,7 +347,7 @@ Http::get('/v1/proxy/health')
             ->send('OK');
     });
 
-Http::get('/v1/proxy/stats') 
+Http::get('/v1/proxy/stats')
     ->inject('response')
     ->inject('state')
     ->action(function (Response $response, State $state) {
