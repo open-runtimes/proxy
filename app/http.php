@@ -53,9 +53,8 @@ Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION)
 // Setup Registry
 $register = new Registry();
 
-function createState(string $dsn): State
-{
-    $dsn = new DSN($dsn);
+$register->set('state', function () {
+    $dsn = new DSN(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
 
     switch($dsn->getScheme()) {
         case 'redis':
@@ -69,7 +68,7 @@ function createState(string $dsn): State
         default:
             throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
     }
-}
+}, fresh: true);
 
 /**
  * Create logger for cloud logging
@@ -130,7 +129,7 @@ $register->set('algorithm', function () {
 // Setup Resources
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
-Http::setResource('state', fn () => createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? ''));
+Http::setResource('state', fn () => $register->get('state'));
 
 // Balancer must NOT be registry. This has to run on every request
 Http::setResource('balancer', function (Algorithm $algorithm, Request $request, State $state) {
@@ -212,8 +211,9 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     return $group;
 }, ['algorithm', 'request', 'state']);
 
-$healthCheck = function (State $state, bool $firstCheck = false) use ($register): void {
+$healthCheck = function (bool $firstCheck = false) use ($register): void {
     $logger = $register->get('logger');
+    $state = $register->get('state');
     $executors = $state->list(RESOURCE_EXECUTORS);
 
     $health = new Health();
@@ -626,11 +626,10 @@ run(function () use ($healthCheck) {
     // Start HTTP server
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
 
-    $state = createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
-    $healthCheck($state, true);
+    $healthCheck(firstCheck: true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck($state, false));
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(firstCheck: false));
 
     Console::success('Functions proxy is ready.');
 
