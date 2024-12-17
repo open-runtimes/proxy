@@ -29,7 +29,7 @@ class RedisCluster implements Adapter
      * @param  string  $hash
      * @return bool
      */
-    public function save(string $key, string $data, string $hash): bool
+    public function set(string $key, string $data, string $hash): bool
     {
         if (empty($key) || empty($data)) {
             return false;
@@ -50,7 +50,7 @@ class RedisCluster implements Adapter
      *
      * @return bool
      */
-    public function saveAll(array $entries, string $hash): bool
+    public function setAll(array $entries, string $hash): bool
     {
         if (empty($hash) || empty($entries)) {
             return false;
@@ -81,36 +81,6 @@ class RedisCluster implements Adapter
         }
 
         return $keys;
-    }
-
-    public function remove(string $key, string $hash): bool
-    {
-        if (empty($key) || empty($hash)) {
-            return false;
-        }
-
-        try {
-            $result = $this->redis->hDel($hash, $key);
-
-            return $result === 1 || $result === 0;
-        } catch (Throwable $th) {
-            return false;
-        }
-    }
-
-    public function removeAll(string $hash): bool
-    {
-        if (empty($hash)) {
-            return false;
-        }
-
-        try {
-            $this->redis->del($hash);
-
-            return true;
-        } catch (Throwable $th) {
-            return false;
-        }
     }
 
     public function flush(): bool

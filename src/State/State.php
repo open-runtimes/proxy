@@ -18,7 +18,7 @@ class State
     }
 
     /**
-     * Save executor status
+     * Set resource entry
      *
      * @param  string  $resource
      * @param  string  $name
@@ -27,14 +27,14 @@ class State
      *
      * @return bool
      */
-    public function save(string $resource, string $name, string $status, float $usage): bool
+    public function set(string $resource, string $name, string $status, float $usage): bool
     {
         $string = json_encode([
             'status' => $status,
             'usage' => $usage,
         ], JSON_THROW_ON_ERROR);
 
-        return $this->adapter->save(
+        return $this->adapter->set(
             key: $name,
             data: $string,
             hash: $resource
@@ -42,7 +42,7 @@ class State
     }
 
     /**
-     * Get all executors status
+     * Get all resource entries
      *
      * @param string  $resource
      *
@@ -65,14 +65,14 @@ class State
     }
 
     /**
-     * Save multiple entries
+     * Save multiple resource entries
      *
      * @param  string  $resource
      * @param  array<string, array<string, mixed>>  $entries
      *
      * @return bool
      */
-    public function saveAll(string $resource, array $entries): bool
+    public function setAll(string $resource, array $entries): bool
     {
         $strings = [];
         foreach ($entries as $key => $value) {
@@ -86,27 +86,14 @@ class State
             ], JSON_THROW_ON_ERROR);
         }
 
-        return $this->adapter->saveAll(
+        return $this->adapter->setAll(
             entries: $strings,
             hash: $resource
         );
     }
 
-    public function remove(string $resource, string $name): bool
-    {
-        return $this->adapter->remove(
-            key: $name,
-            hash: $resource
-        );
-    }
-
-    public function removeAll(string $resource): bool
-    {
-        return $this->adapter->removeAll($resource);
-    }
-
     /**
-     * Purge executors
+     * Purge resources
      *
      * @return bool
      */

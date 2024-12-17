@@ -17,13 +17,13 @@ abstract class Base extends TestCase
         self::$state->flush();
     }
 
-    public function testSave(): void
+    public function testSet(): void
     {
         $resource = uniqid();
 
         // test saving
         $name = uniqid();
-        $result = self::$state->save($resource, $name, 'online', 100);
+        $result = self::$state->set($resource, $name, 'online', 100);
 
         $this->assertEquals(true, $result);
         $this->assertEquals([
@@ -34,7 +34,7 @@ abstract class Base extends TestCase
         ], self::$state->list($resource));
 
         // test updating
-        $result = self::$state->save($resource, $name, 'offline', 0);
+        $result = self::$state->set($resource, $name, 'offline', 0);
         $this->assertEquals(true, $result);
 
         $this->assertEquals([
@@ -46,7 +46,7 @@ abstract class Base extends TestCase
 
         // test adding
         $nameTwo = uniqid($resource, true);
-        $result = self::$state->save($resource, $nameTwo, 'online', 95);
+        $result = self::$state->set($resource, $nameTwo, 'online', 95);
 
         $this->assertEquals(true, $result);
 
@@ -62,7 +62,7 @@ abstract class Base extends TestCase
         ], self::$state->list($resource));
     }
 
-    public function testSaveAll(): void
+    public function testSetAll(): void
     {
         $resource = uniqid();
 
@@ -81,7 +81,7 @@ abstract class Base extends TestCase
             ],
         ];
 
-        $result = self::$state->saveAll($resource, $entries);
+        $result = self::$state->setAll($resource, $entries);
         $this->assertEquals(true, $result);
 
         $this->assertEquals($entries, self::$state->list($resource));
@@ -89,7 +89,7 @@ abstract class Base extends TestCase
         // test updating
         $entries[$nameOne]['status'] = 'offline';
 
-        $result = self::$state->saveAll($resource, $entries);
+        $result = self::$state->setAll($resource, $entries);
         $this->assertEquals(true, $result);
 
         $this->assertEquals($entries, self::$state->list($resource));
@@ -102,7 +102,7 @@ abstract class Base extends TestCase
             ],
         ];
 
-        $result = self::$state->saveAll($resource, $entries);
+        $result = self::$state->setAll($resource, $entries);
         $this->assertEquals(true, $result);
 
         $this->assertEquals($entries, self::$state->list($resource));
@@ -116,7 +116,7 @@ abstract class Base extends TestCase
         $resourceId = uniqid();
         $name = uniqid();
 
-        $data = self::$state->save($resourceNested . $resourceId, $name, 'online', 100);
+        $data = self::$state->set($resourceNested . $resourceId, $name, 'online', 100);
         $this->assertEquals(true, $data);
 
         $this->assertEquals([
@@ -127,7 +127,7 @@ abstract class Base extends TestCase
         ], self::$state->list($resourceNested . $resourceId));
 
         // test updating
-        $data = self::$state->save($resourceNested . $resourceId, $name, 'offline', 0);
+        $data = self::$state->set($resourceNested . $resourceId, $name, 'offline', 0);
         $this->assertEquals(true, $data);
 
         $this->assertEquals([
@@ -139,7 +139,7 @@ abstract class Base extends TestCase
 
         $nameTwo = uniqid();
 
-        $data = self::$state->save($resourceNested . $resourceId, $nameTwo, 'online', 95);
+        $data = self::$state->set($resourceNested . $resourceId, $nameTwo, 'online', 95);
 
         $this->assertEquals(true, $data);
 
@@ -153,47 +153,5 @@ abstract class Base extends TestCase
                 'usage' => 95,
             ],
         ], self::$state->list($resourceNested . $resourceId));
-    }
-
-    public function testRemoveAndRemoveAll(): void
-    {
-        $resource = uniqid();
-
-        // test saving
-        $nameOne = uniqid();
-        $nameTwo = uniqid();
-
-        $entries = [
-            $nameOne => [
-                'status' => 'online',
-                'usage' => 100,
-            ],
-            $nameTwo => [
-                'status' => 'offline',
-                'usage' => 0,
-            ],
-        ];
-
-        $result = self::$state->saveAll($resource, $entries);
-        $this->assertEquals(true, $result);
-
-        $this->assertEquals($entries, self::$state->list($resource));
-
-        // test remove
-        $result = self::$state->remove($resource, $nameOne);
-        $this->assertEquals(true, $result);
-
-        $this->assertEquals([
-            $nameTwo => [
-                'status' => 'offline',
-                'usage' => 0,
-            ],
-        ], self::$state->list($resource));
-
-        // test remove all
-        $result = self::$state->removeAll($resource);
-        $this->assertEquals(true, $result);
-
-        $this->assertEquals([], self::$state->list($resource));
     }
 }

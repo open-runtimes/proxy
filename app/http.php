@@ -156,7 +156,8 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
             $balancer->addFilter(function ($option) use ($runtimeId) {
                 $runtimes = $option->getState('runtimes', []);
                 $runtime = $runtimes[$runtimeId] ?? [];
-                return ($runtime['usage'] ?? 100) < 80;
+                return ($runtime['usage'] ?? 100) < 80 &&
+                       ($runtime['status'] ?? '') === 'pass';
             });
             $balancers[] = $balancer;
         }
@@ -176,14 +177,22 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
         $balancer->addFilter(fn () => true);
         $balancers[] = $balancer;
     } else {
-        // Any executors
+        // Any executors that have the runtime in "pass" status if runtime ID is provided
         $balancer = new Balancer($algorithm);
-        $balancer->addFilter(fn () => true);
+        if (!empty($runtimeId)) {
+            $balancer->addFilter(function ($option) use ($runtimeId) {
+                $runtimes = $option->getState('runtimes', []);
+                $runtime = $runtimes[$runtimeId] ?? [];
+                return ($runtime['status'] ?? '') === 'pass';
+            });
+        } else {
+            $balancer->addFilter(fn () => true);
+        }
         $balancers[] = $balancer;
     }
 
     foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
-        $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname); // TODO: Avoid those extra Redis calls
+        $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname);
         $executor['hostname'] = $hostname;
 
         if (Http::isDevelopment()) {
@@ -232,7 +241,7 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
             $healthy = false;
         }
 
-        $state->save(
+        $state->set(
             resource: RESOURCE_EXECUTORS,
             name: $hostname,
             status: $node->isOnline() ? 'online' : 'offline',
@@ -253,7 +262,7 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
                 'usage' => $runtime['usage'] ?? 100,
             ];
         }
-        $state->saveAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
+        $state->setAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
     }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
@@ -341,7 +350,7 @@ Http::wildcard()
             // Next health check with confirm it started well, and update usage stats
             $runtimeId = $request->getHeader('x-opr-runtime-id', '');
             if (!empty($runtimeId)) {
-                $state->save(RESOURCE_RUNTIMES . $hostname, $runtimeId, 'pass', 0);
+                $state->set(RESOURCE_RUNTIMES . $hostname, $runtimeId, 'pass', 0);
             }
 
             $headers = \array_merge($request->getHeaders(), [
@@ -460,8 +469,8 @@ Http::wildcard()
                     CURLE_COULDNT_CONNECT,       // TCP connection failure - the executor process is not accepting connections, suggesting it's down or blocked by firewall
                     CURLE_OPERATION_TIMEDOUT     // Connection timeout - the executor is not responding at all, indicating it's frozen or network is completely blocked
                 ])) {
-                    $state->remove(RESOURCE_EXECUTORS, $hostname);
-                    $state->removeAll(RESOURCE_RUNTIMES . $hostname);
+                    $state->set(RESOURCE_EXECUTORS, $hostname, 'offline', 100);
+                    $state->setAll(RESOURCE_RUNTIMES . $hostname, []);
                     Console::error("Executor '$hostname' appears to be down (Error $errNo: $error). Removed from state.");
                 }
                 // Runtime-specific errors that indicate issues with processing a specific request
@@ -471,7 +480,7 @@ Http::wildcard()
                     CURLE_SEND_ERROR,   // Failed to send request - runtime might be overloaded or in a bad state
                     CURLE_GOT_NOTHING   // Empty response - runtime likely crashed after accepting the connection
                 ])) {
-                    $state->remove(RESOURCE_RUNTIMES . $hostname, $runtimeId);
+                    $state->set(RESOURCE_RUNTIMES . $hostname, $runtimeId, 'fail', 0);
                     Console::warning("Runtime '$runtimeId' on executor '$hostname' encountered an error (Error $errNo: $error). Removed from state.");
                 }
 
