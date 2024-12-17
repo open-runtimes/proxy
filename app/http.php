@@ -211,9 +211,10 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     return $group;
 }, ['algorithm', 'request', 'state']);
 
-$healthCheck = function (bool $firstCheck = false) use ($register): void {
+$healthCheck = function (bool $verbose = false) use ($register): void {
     $logger = $register->get('logger');
     $state = $register->get('state');
+    $verbose = Http::isDevelopment() || $verbose;
 
     $health = new Health();
     foreach (\explode(',', (string) Http::getEnv('OPR_PROXY_EXECUTORS', '')) as $hostname) {
@@ -228,13 +229,12 @@ $healthCheck = function (bool $firstCheck = false) use ($register): void {
             $executor = $executors[$hostname] ?? [];
             $newStatus = $node->isOnline() ? 'online' : 'offline';
             $healthy = $healthy && $node->isOnline();
-            $shouldLog = $firstCheck || Http::isDevelopment() || $executor['status'] !== $newStatus;
 
-            if ($node->isOnline() && $shouldLog) {
+            if ($node->isOnline() && ($verbose || $executor['status'] !== $newStatus)) {
                 Console::info('Executor "' . $hostname . '" is online');
             }
 
-            if (!$node->isOnline() && $shouldLog) {
+            if (!$node->isOnline() && ($verbose || $executor['status'] !== $newStatus)) {
                 $message = $node->getState()['message'] ?? 'Unexpected error.';
                 $error = new Exception('Executor "' . $hostname . '" went offline: ' . $message, 500);
                 logError($error, "healthCheckError", $logger, null);
@@ -247,7 +247,7 @@ $healthCheck = function (bool $firstCheck = false) use ($register): void {
                 usage: $node->getState()['usage'] ?? 0
             );
 
-            if (Http::isDevelopment()) {
+            if ($verbose) {
                 Console::log('Executor "' . $hostname . '" healthcheck returned ' . \count($node->getState()['runtimes'] ?? []) . ' runtimes');
             }
 
@@ -625,10 +625,10 @@ run(function () use ($healthCheck) {
     // Start HTTP server
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
 
-    $healthCheck(firstCheck: true);
+    $healthCheck(verbose: true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(firstCheck: false));
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(verbose: false));
 
     Console::success('Functions proxy is ready.');
 
