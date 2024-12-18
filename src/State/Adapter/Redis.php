@@ -2,85 +2,71 @@
 
 namespace OpenRuntimes\State\Adapter;
 
+use OpenRuntimes\State\State;
 use Redis as Client;
-use Throwable;
-use OpenRuntimes\State\Adapter;
 
-class Redis implements Adapter
+class Redis implements State
 {
     /**
      * @var Client
      */
-    protected Client $redis;
+    private $redis;
 
     /**
-     * Redis constructor.
-     *
-     * @param  Client  $redis
+     * @param Client $redis
      */
-    public function __construct(Client $redis)
+    public function __construct($redis)
     {
         $this->redis = $redis;
     }
 
-    /**
-     * @param  string  $key
-     * @param  string  $data
-     * @param  string  $hash
-     * @return bool
-     */
-    public function save(string $key, string $data, string $hash): bool
+    public function save(string $resource, string $name, string $status, float $usage): bool
     {
-        if (empty($key) || empty($data)) {
-            return false;
-        }
+        $string = json_encode([
+            'status' => $status,
+            'usage' => $usage,
+        ], JSON_THROW_ON_ERROR);
 
-        try {
-            $result = $this->redis->hSet($hash, $key, $data);
-
-            return $result === 1 || $result === 0;
-        } catch (Throwable $th) {
-            return false;
-        }
+        return $this->redis->hSet($resource, $name, $string) !== false;
     }
 
-    /**
-     * @param  array<string,string>  $entries
-     * @param  string  $hash
-     *
-     * @return bool
-     */
-    public function saveAll(array $entries, string $hash): bool
+    public function list(string $resource): array
     {
-        if (empty($hash) || empty($entries)) {
-            return false;
+        $entries = $this->redis->hGetAll($resource) ?: [];
+        $objects = [];
+        foreach ($entries as $key => $value) {
+            $json = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+            $objects[$key] = [
+                'status' => $json['status'] ?? null,
+                'usage' => $json['usage'] ?? 0,
+            ];
         }
 
-        try {
-            $this->redis->multi();
-            $this->redis->del($hash);
-            $this->redis->hMSet($hash, $entries);
-            $this->redis->exec();
-
-            return true;
-        } catch (Throwable $th) {
-            return false;
-        }
+        return $objects;
     }
 
-    /**
-     * @param  string  $hash
-     * @return array<string, string>
-     */
-    public function getAll(string $hash): array
+    public function saveAll(string $resource, array $entries): bool
     {
-        $keys = $this->redis->hGetAll($hash);
+        $pipeline = $this->redis->multi();
 
-        if (empty($keys)) {
-            return [];
+        foreach ($entries as $key => $value) {
+            if (!isset($value['status'], $value['usage'])) {
+                continue;
+            }
+            $string = json_encode([
+                'status' => $value['status'],
+                'usage' => $value['usage'],
+            ], JSON_THROW_ON_ERROR);
+            $pipeline->hSet($resource, $key, $string);
         }
+        $results = $pipeline->exec();
 
-        return $keys;
+        return $results !== false;
+    }
+
+    public function remove(string $resource, string $name): bool
+    {
+        return (bool)$this->redis->hDel($resource, $name);
     }
 
     public function flush(): bool

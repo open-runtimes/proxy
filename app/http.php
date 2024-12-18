@@ -2,10 +2,10 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use OpenRuntimes\State\Adapter\Redis as RedisAdapter;
-use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterAdapter;
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
+use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterState;
+use OpenRuntimes\State\Adapter\Redis as RedisState;
 use OpenRuntimes\State\State;
 use Swoole\Runtime;
 use Swoole\Timer;
@@ -44,7 +44,7 @@ const ADDRESSING_METHOD_ANYCAST_FAST = 'anycast-fast';
 const ADDRESSING_METHOD_BROADCAST = 'broadcast';
 
 const RESOURCE_EXECUTORS = '{executors}';
-const RESOURCE_RUNTIMES = '{executors-runtimes}:';
+const RESOURCE_RUNTIMES = '{runtimes}';
 
 Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
@@ -52,24 +52,6 @@ Http::setMode((string) Http::getEnv('OPR_PROXY_ENV', Http::MODE_TYPE_PRODUCTION)
 
 // Setup Registry
 $register = new Registry();
-
-function createState(string $dsn): State
-{
-    $dsn = new DSN($dsn);
-
-    switch($dsn->getScheme()) {
-        case 'redis':
-            $redis = new Redis();
-            $redis->connect($dsn->getHost(), intval($dsn->getPort()));
-            return new State(new RedisAdapter($redis));
-        case 'redis-cluster':
-            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
-            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
-            return new State(new RedisClusterAdapter($redisCluster));
-        default:
-            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
-    }
-}
 
 /**
  * Create logger for cloud logging
@@ -127,10 +109,36 @@ $register->set('algorithm', function () {
     return $algo;
 });
 
+$register->set('state', function () use ($register) {
+    $connectionString = Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '');
+    if (empty($connectionString)) {
+        throw new Exception("No state DSN provided.");
+    }
+
+    $dsn = new DSN($connectionString);
+
+    switch($dsn->getScheme()) {
+        case 'redis':
+            $redis = new Redis();
+            $redis->connect($dsn->getHost(), (int) $dsn->getPort());
+            $state = new RedisState($redis);
+            break;
+        case 'redis-cluster':
+            $hosts = explode(';', str_replace(["[", "]"], "", $dsn->getHost()));
+            $redisCluster = new \RedisCluster(null, $hosts, -1, -1, true, $dsn->getPassword());
+            $state = new RedisClusterState($redisCluster);
+            break;
+        default:
+            throw new Exception('Unsupported state connection: ' . $dsn->getScheme());
+    }
+
+    return $state;
+}, fresh: true);
+
 // Setup Resources
 Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
-Http::setResource('state', fn () => createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? ''));
+Http::setResource('state', fn () => $register->get('state'));
 
 // Balancer must NOT be registry. This has to run on every request
 Http::setResource('balancer', function (Algorithm $algorithm, Request $request, State $state) {
@@ -183,8 +191,21 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
         $balancers[] = $balancer;
     }
 
-    foreach ($state->list(RESOURCE_EXECUTORS) as $hostname => $executor) {
-        $executor['runtimes'] = $state->list(RESOURCE_RUNTIMES . $hostname); // TODO: Avoid those extra Redis calls
+    $executors = $state->list(RESOURCE_EXECUTORS);
+    $allRuntimes = $state->list(RESOURCE_RUNTIMES);
+
+    // Group runtimes by executor
+    $runtimesByExecutor = [];
+    foreach ($allRuntimes as $key => $value) {
+        [$host, $runtimeId] = explode('/', $key, 2);
+        if (!isset($runtimesByExecutor[$host])) {
+            $runtimesByExecutor[$host] = [];
+        }
+        $runtimesByExecutor[$host][$runtimeId] = $value;
+    }
+
+    foreach ($executors as $hostname => $executor) {
+        $executor['runtimes'] = $runtimesByExecutor[$hostname] ?? [];
         $executor['hostname'] = $hostname;
 
         if (Http::isDevelopment()) {
@@ -204,8 +225,9 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     return $group;
 }, ['algorithm', 'request', 'state']);
 
-$healthCheck = function (State $state, bool $firstCheck = false) use ($register): void {
+$healthCheck = function (bool $firstCheck = false) use ($register): void {
     $logger = $register->get('logger');
+    $state = $register->get('state');
     $executors = $state->list(RESOURCE_EXECUTORS);
 
     $health = new Health();
@@ -240,21 +262,32 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
             usage: $node->getState()['usage'] ?? 0
         );
 
-        $runtimes = [];
+        $allCurrentRuntimes = $state->list(RESOURCE_RUNTIMES);
 
-        Console::log('Executor "' . $hostname . '" healthcheck returned ' . \count($node->getState()['runtimes'] ?? []) . ' runtimes');
-        foreach ($node->getState()['runtimes'] ?? [] as $runtimeId => $runtime) {
-            if (!\is_string($runtimeId) || !\is_array($runtime)) {
-                Console::warning('Invalid runtime data for ' . $hostname . ' runtime ' . $runtimeId);
-                continue;
+        // Collect all new runtimes
+        $newRuntimes = [];
+        foreach ($health->getNodes() as $node) {
+            $hostname = $node->getHostname();
+            $reportedRuntimes = $node->getState()['runtimes'] ?? [];
+
+            foreach ($reportedRuntimes as $runtimeId => $runtime) {
+                $newRuntimes[$hostname . '/' . $runtimeId] = [
+                    'status' => $runtime['status'] ?? 'offline',
+                    'usage' => $runtime['usage'] ?? 100,
+                ];
             }
-
-            $runtimes[$runtimeId] = [
-                'status' => $runtime['status'] ?? 'offline',
-                'usage' => $runtime['usage'] ?? 100,
-            ];
         }
-        $state->saveAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
+
+        // Remove outdated runtimes not present in latest healthcheck
+        foreach (array_keys($allCurrentRuntimes) as $existingKey) {
+            if (!isset($newRuntimes[$existingKey])) {
+                // This runtime was not reported by the current healthcheck, remove it
+                [$host, $runtimeId] = explode('/', $existingKey, 2);
+                $state->remove(RESOURCE_RUNTIMES, $host . '/' . $runtimeId);
+            }
+        }
+
+        $state->saveAll(RESOURCE_RUNTIMES, $newRuntimes);
     }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
@@ -304,12 +337,9 @@ function logError(Throwable $error, string $action, ?Logger $logger, Route $rout
 }
 
 Http::init()
+    ->groups(['proxy'])
     ->inject('request')
     ->action(function (Request $request) {
-        if ($request->getURI() === '/v1/proxy/health') {
-            return;
-        }
-
         $secretKey = \explode(' ', $request->getHeader('authorization', ''))[1] ?? '';
 
         if (empty($secretKey) || $secretKey !== Http::getEnv('OPR_PROXY_SECRET', '')) {
@@ -325,7 +355,62 @@ Http::get('/v1/proxy/health')
             ->send('OK');
     });
 
+Http::get('/v1/debug/redis-perf')
+    ->inject('state')
+    ->inject('response')
+    ->action(function (State $state, Response $response) {
+        $results = [];
+        
+        // hrtime returns nanoseconds, convert to ms by dividing by 1e6
+        $start = hrtime(true);
+        
+        // Get list of executors with timing
+        $executorStart = hrtime(true);
+        $executors = $state->list(RESOURCE_EXECUTORS);
+        $results['executor_query_time_ms'] = (hrtime(true) - $executorStart) / 1e6;
+        
+        // Get all runtimes with timing
+        $runtimeStart = hrtime(true);
+        $allRuntimes = $state->list(RESOURCE_RUNTIMES);
+        $results['runtime_query_time_ms'] = (hrtime(true) - $runtimeStart) / 1e6;
+        
+        // Process runtimes with timing
+        $processingStart = hrtime(true);
+        
+        // Group runtimes by executor using more efficient array operations
+        $runtimesByExecutor = [];
+        foreach ($allRuntimes as $key => $value) {
+            $parts = explode('/', $key, 2);
+            if (count($parts) !== 2) {
+                continue; // Skip invalid entries
+            }
+            [$host, $runtimeId] = $parts;
+            $runtimesByExecutor[$host][$runtimeId] = $value;
+        }
+        
+        // Calculate runtime sizes with memory optimization
+        $results['runtime_sizes'] = array_map(function($executorRuntimes) {
+            return is_array($executorRuntimes) ? count($executorRuntimes) : 0;
+        }, $runtimesByExecutor);
+        
+        // Add missing executors with zero runtimes
+        foreach ($executors as $hostname => $_) {
+            if (!isset($results['runtime_sizes'][$hostname])) {
+                $results['runtime_sizes'][$hostname] = 0;
+            }
+        }
+        
+        $results['processing_time_ms'] = (hrtime(true) - $processingStart) / 1e6;
+
+        return $response->json([
+            'success' => true,
+            'stats' => $results,
+            'timestamp_ms' => round(microtime(true) * 1000) // Unix timestamp in milliseconds
+        ]);
+    });
+
 Http::wildcard()
+    ->groups(['proxy'])
     ->inject('balancer')
     ->inject('request')
     ->inject('response')
@@ -579,18 +664,22 @@ Http::error()
 run(function () use ($healthCheck) {
     $payloadSize = 22 * (1024 * 1024);
 
+    $workerPerCore = (int) (getenv('OPR_PROXY_WORKER_PER_CORE') ?: 6);
+    $cpuCores = swoole_cpu_num();
+
     $settings = [
         'package_max_length' => $payloadSize,
         'buffer_output_size' => $payloadSize,
+        'worker_num' => $cpuCores * $workerPerCore,
     ];
     // Start HTTP server
+
     $http = new Http(new Server('0.0.0.0', Http::getEnv('PORT', '80'), $settings), 'UTC');
 
-    $state = createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? '');
-    $healthCheck($state, true);
+    $healthCheck(true);
 
     $defaultInterval = '10000'; // 10 seconds
-    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck($state, false));
+    Timer::tick(\intval(Http::getEnv('OPR_PROXY_HEALTHCHECK_INTERVAL', $defaultInterval)), fn () => $healthCheck(false));
 
     Console::success('Functions proxy is ready.');
 

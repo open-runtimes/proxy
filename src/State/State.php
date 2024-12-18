@@ -2,21 +2,8 @@
 
 namespace OpenRuntimes\State;
 
-class State
+interface State
 {
-    /**
-     * @var Adapter
-     */
-    private $adapter;
-
-    /**
-     * @param  Adapter  $adapter
-     */
-    public function __construct(Adapter $adapter)
-    {
-        $this->adapter = $adapter;
-    }
-
     /**
      * Save executor status
      *
@@ -27,19 +14,7 @@ class State
      *
      * @return bool
      */
-    public function save(string $resource, string $name, string $status, float $usage): bool
-    {
-        $string = json_encode([
-            'status' => $status,
-            'usage' => $usage,
-        ], JSON_THROW_ON_ERROR);
-
-        return $this->adapter->save(
-            key: $name,
-            data: $string,
-            hash: $resource
-        );
-    }
+    public function save(string $resource, string $name, string $status, float $usage): bool;
 
     /**
      * Get all executors status
@@ -48,21 +23,7 @@ class State
      *
      * @return array<string, array<string, mixed>>
      */
-    public function list(string $resource): array
-    {
-        $entries = $this->adapter->getAll($resource);
-
-        $objects = [];
-        foreach ($entries as $key => $value) {
-            $json = json_decode($value, true, 512, JSON_THROW_ON_ERROR);
-            $objects[$key] = [
-                'status' => $json['status'] ?? null,
-                'usage' => $json['usage'] ?? 0,
-            ];
-        }
-
-        return $objects;
-    }
+    public function list(string $resource): array;
 
     /**
      * Save multiple entries
@@ -72,33 +33,22 @@ class State
      *
      * @return bool
      */
-    public function saveAll(string $resource, array $entries): bool
-    {
-        $strings = [];
-        foreach ($entries as $key => $value) {
-            if (!isset($value['status'], $value['usage'])) {
-                continue;
-            }
+    public function saveAll(string $resource, array $entries): bool;
 
-            $strings[$key] = json_encode([
-                'status' => $value['status'],
-                'usage' => $value['usage'],
-            ], JSON_THROW_ON_ERROR);
-        }
-
-        return $this->adapter->saveAll(
-            entries: $strings,
-            hash: $resource
-        );
-    }
+    /**
+     * Remove resource
+     *
+     * @param  string  $resource
+     * @param  string  $name
+     *
+     * @return bool
+     */
+    public function remove(string $resource, string $name): bool;
 
     /**
      * Purge executors
      *
      * @return bool
      */
-    public function flush(): bool
-    {
-        return $this->adapter->flush();
-    }
+    public function flush(): bool;
 }
