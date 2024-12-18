@@ -215,46 +215,58 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
 
     $healthy = true;
     foreach ($health->run()->getNodes() as $node) {
-        $hostname = $node->getHostname();
-        $executor = $executors[$hostname] ?? [];
-        $newStatus = $node->isOnline() ? 'online' : 'offline';
+        try {
+            $hostname = $node->getHostname();
+            $executor = $executors[$hostname] ?? [];
+            $newStatus = $node->isOnline() ? 'online' : 'offline';
 
-        if ($firstCheck || Http::isDevelopment() || $executor['status'] !== $newStatus) {
-            if ($newStatus === 'online') {
-                Console::info('Executor "' . $hostname . '" went online');
-            } else {
-                $message = $node->getState()['message'] ?? 'Unexpected error.';
-                $error = new Exception('Executor "' . $hostname . '" went offline: ' . $message, 500);
-                logError($error, "healthCheckError", $logger, null);
-            }
-        }
-
-        if (!$node->isOnline()) {
-            $healthy = false;
-        }
-
-        $state->save(
-            resource: RESOURCE_EXECUTORS,
-            name: $hostname,
-            status: $node->isOnline() ? 'online' : 'offline',
-            usage: $node->getState()['usage'] ?? 0
-        );
-
-        $runtimes = [];
-
-        Console::log('Executor "' . $hostname . '" healthcheck returned ' . \count($node->getState()['runtimes'] ?? []) . ' runtimes');
-        foreach ($node->getState()['runtimes'] ?? [] as $runtimeId => $runtime) {
-            if (!\is_string($runtimeId) || !\is_array($runtime)) {
-                Console::warning('Invalid runtime data for ' . $hostname . ' runtime ' . $runtimeId);
-                continue;
+            if ($firstCheck || Http::isDevelopment() || $executor['status'] !== $newStatus) {
+                if ($newStatus === 'online') {
+                    Console::info('Executor "' . $hostname . '" went online');
+                } else {
+                    $message = $node->getState()['message'] ?? 'Unexpected error.';
+                    $error = new Exception('Executor "' . $hostname . '" went offline: ' . $message, 500);
+                    logError($error, "healthCheckError", $logger, null);
+                }
             }
 
-            $runtimes[$runtimeId] = [
-                'status' => $runtime['status'] ?? 'offline',
-                'usage' => $runtime['usage'] ?? 100,
-            ];
+            if (!$node->isOnline()) {
+                $healthy = false;
+            }
+
+            $state->save(
+                resource: RESOURCE_EXECUTORS,
+                name: $hostname,
+                status: $node->isOnline() ? 'online' : 'offline',
+                usage: $node->getState()['usage'] ?? 0
+            );
+
+            $runtimes = [];
+
+            Console::log('Executor "' . $hostname . '" healthcheck returned ' . \count($node->getState()['runtimes'] ?? []) . ' runtimes');
+            foreach ($node->getState()['runtimes'] ?? [] as $runtimeId => $runtime) {
+                if (!\is_string($runtimeId) || !\is_array($runtime)) {
+                    Console::warning('Invalid runtime data for ' . $hostname . ' runtime ' . $runtimeId);
+                    continue;
+                }
+
+                $runtimes[$runtimeId] = [
+                    'status' => $runtime['status'] ?? 'offline',
+                    'usage' => $runtime['usage'] ?? 100,
+                ];
+            }
+            $state->saveAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
+        } catch (\Throwable $th) {
+            try {
+                $healthy = false;
+                Console::warning('Health check failed for ' . $node->getHostname() . ': ' . $th->getMessage() . ' - removing from state');
+
+                $state->save(RESOURCE_EXECUTORS, $node->getHostname(), 'offline', 100);
+                $state->saveAll(RESOURCE_RUNTIMES . $node->getHostname(), []);
+            } catch (\Throwable $th) {
+                Console::warning('Failed to remove executor from state: ' . $th->getMessage());
+            }
         }
-        $state->saveAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
     }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
