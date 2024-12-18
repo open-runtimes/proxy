@@ -156,7 +156,8 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
             $balancer->addFilter(function ($option) use ($runtimeId) {
                 $runtimes = $option->getState('runtimes', []);
                 $runtime = $runtimes[$runtimeId] ?? [];
-                return ($runtime['usage'] ?? 100) < 80;
+                return ($runtime['usage'] ?? 100) < 80
+                    && $runtime['status'] === 'pass';
             });
             $balancers[] = $balancer;
         }
@@ -471,7 +472,7 @@ Http::wildcard()
                     CURLE_SEND_ERROR,   // Failed to send request - runtime might be overloaded or in a bad state
                     CURLE_GOT_NOTHING   // Empty response - runtime likely crashed after accepting the connection
                 ])) {
-                    $state->save(RESOURCE_RUNTIMES . $hostname, $runtimeId, 'fail', 0);
+                    $state->save(RESOURCE_RUNTIMES . $hostname, $runtimeId, 'offline', 100);
                     Console::warning("Runtime '$runtimeId' on executor '$hostname' encountered an error (Error $errNo: $error). Removed from state.");
                 }
 
