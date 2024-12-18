@@ -217,7 +217,7 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
         try {
             $hostname = $node->getHostname();
             $executor = $executors[$hostname] ?? [];
-            $newStatus = $node->isOnline() ? 'online' : 'offline';  
+            $newStatus = $node->isOnline() ? 'online' : 'offline';
 
             if ($firstCheck || Http::isDevelopment() || $executor['status'] !== $newStatus) {
                 if ($newStatus === 'online') {
@@ -266,7 +266,7 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
                 Console::warning('Failed to remove executor from state: ' . $th->getMessage());
             }
         }
-}
+    }
 
     if (Http::getEnv('OPR_PROXY_HEALTHCHECK_URL', '') !== '' && $healthy) {
         try {
