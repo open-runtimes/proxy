@@ -454,6 +454,27 @@ Http::wildcard()
                     $response->end();
                 }
 
+                // Critical executor errors that indicate the machine is unreachable
+                if (in_array($errNo, [
+                    CURLE_COULDNT_RESOLVE_HOST,  // DNS failure - the executor's hostname cannot be resolved, indicating either the executor is completely offline or DNS issues
+                    CURLE_COULDNT_CONNECT,       // TCP connection failure - the executor process is not accepting connections, suggesting it's down or blocked by firewall
+                    CURLE_OPERATION_TIMEDOUT     // Connection timeout - the executor is not responding at all, indicating it's frozen or network is completely blocked
+                ])) {
+                    $state->save(RESOURCE_EXECUTORS, $hostname, 'offline', 100);
+                    $state->saveAll(RESOURCE_RUNTIMES . $hostname, []);
+                    Console::error("Executor '$hostname' appears to be down (Error $errNo: $error). Removed from state.");
+                }
+                // Runtime-specific errors that indicate issues with processing a specific request
+                // These errors occur after a connection is established, suggesting the executor is up but the runtime is having issues
+                elseif (!empty($runtimeId) && in_array($errNo, [
+                    CURLE_RECV_ERROR,   // Failed to receive response - runtime might have crashed while processing
+                    CURLE_SEND_ERROR,   // Failed to send request - runtime might be overloaded or in a bad state
+                    CURLE_GOT_NOTHING   // Empty response - runtime likely crashed after accepting the connection
+                ])) {
+                    $state->save(RESOURCE_RUNTIMES . $hostname, $runtimeId, 'fail', 0);
+                    Console::warning("Runtime '$runtimeId' on executor '$hostname' encountered an error (Error $errNo: $error). Removed from state.");
+                }
+
                 throw new Exception('Unexpected curl error between proxy and executor ID ' . $hostname . ' (' . $errNo .  '): ' . $error);
             }
 
