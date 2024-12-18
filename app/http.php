@@ -255,7 +255,7 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
                 ];
             }
             $state->saveAll(RESOURCE_RUNTIMES . $hostname, $runtimes);
-        } catch (Throwable $th) {
+        } catch (\Throwable $th) {
             try {
                 $healthy = false;
                 Console::warning('Health check failed for ' . $node->getHostname() . ': ' . $th->getMessage() . ' - removing from state');
