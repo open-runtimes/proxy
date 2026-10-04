@@ -51,7 +51,6 @@ services:
       - OPR_PROXY_ENV
       - OPR_PROXY_EXECUTOR_SECRET
       - OPR_PROXY_SECRET
-      - OPR_PROXY_LOGGING_PROVIDER
       - OPR_PROXY_LOGGING_CONFIG
       - OPR_PROXY_HEALTHCHECK
       - OPR_PROXY_HEALTHCHECK_URL
@@ -77,7 +76,6 @@ OPR_PROXY_HEALTHCHECK_INTERVAL=5000
 OPR_PROXY_HEALTHCHECK_URL=
 OPR_PROXY_ENV=development
 OPR_PROXY_EXECUTOR_SECRET=executor-secret-key
-OPR_PROXY_LOGGING_PROVIDER=
 OPR_PROXY_LOGGING_CONFIG=
 ```
 
@@ -119,8 +117,7 @@ docker compose down
 | OPR_PROXY_ENV                  | Runtime environment. 'production' or 'development'. Development may expose debug information and is not recommended on production server. |
 | OPR_PROXY_SECRET               | Secret that needs to be provided in `Authroization` header when communicating with the to proxy.                                          |
 | OPR_PROXY_EXECUTOR_SECRET      | String provided as `authorization` header by proxy when sending request to executor.                                                      |
-| OPR_PROXY_LOGGING_PROVIDER     | Logging provider. Supports `sentry`, `appsignal`, `raygun`, `logowl`. Leave empty for no cloud logging.                                   |
-| OPR_PROXY_LOGGING_CONFIG       | Logging configuration as requested by `utopia-php/logger`.                                                                                |
+| OPR_PROXY_LOGGING_CONFIG       | Sentry DSN in the form `sentry://PROJECT_ID:KEY@HOST` to report server errors to Sentry. Leave empty to only print errors to stdout.       |
 
 ## Contributing
 

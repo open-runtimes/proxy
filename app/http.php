@@ -6,15 +6,10 @@ use OpenRuntimes\State\Adapter\Redis as RedisAdapter;
 use OpenRuntimes\State\Adapter\RedisCluster as RedisClusterAdapter;
 use OpenRuntimes\Proxy\Health\Health;
 use OpenRuntimes\Proxy\Health\Node;
+use OpenRuntimes\Proxy\Report;
 use OpenRuntimes\State\State;
 use Swoole\Runtime;
 use Swoole\Timer;
-use Utopia\Logger\Log;
-use Utopia\Logger\Logger;
-use Utopia\Logger\Adapter\AppSignal;
-use Utopia\Logger\Adapter\LogOwl;
-use Utopia\Logger\Adapter\Raygun;
-use Utopia\Logger\Adapter\Sentry;
 use Utopia\Balancer\Algorithm;
 use Utopia\Balancer\Algorithm\First;
 use Utopia\Balancer\Algorithm\Last;
@@ -31,8 +26,11 @@ use Utopia\Http\Http;
 use Utopia\Http\Request;
 use Utopia\Http\Response;
 use Utopia\Http\Adapter\Swoole\Response as SwooleResponse;
-use Utopia\Http\Route;
 use Utopia\Registry\Registry;
+use Utopia\Span\Exporter\Pretty;
+use Utopia\Span\Exporter\Sentry;
+use Utopia\Span\Exporter\Stdout;
+use Utopia\Span\Span;
 
 use function Swoole\Coroutine\run;
 
@@ -71,48 +69,32 @@ function createState(string $dsn): State
     }
 }
 
-/**
- * Create logger for cloud logging
- */
-$register->set('logger', function () {
-    $providerName = Http::getEnv('OPR_PROXY_LOGGING_PROVIDER', '');
-    $providerConfig = Http::getEnv('OPR_PROXY_LOGGING_CONFIG', '');
+// Every reported error is printed to stdout. `OPR_PROXY_LOGGING_CONFIG`, when it
+// holds a `sentry://PROJECT_ID:KEY@HOST` DSN, also ships errors to Sentry; client
+// errors carry error.publish=false and stay out of it.
+$exporters = [Http::isDevelopment() ? new Pretty() : new Stdout()];
 
+$loggingConfig = (string) Http::getEnv('OPR_PROXY_LOGGING_CONFIG', '');
+if ($loggingConfig !== '') {
     try {
-        $loggingProvider = new DSN($providerConfig ?? '');
+        $dsn = new DSN($loggingConfig);
+        if ($dsn->getScheme() !== 'sentry') {
+            throw new InvalidArgumentException('Only the sentry:// scheme is supported');
+        }
 
-        $providerName = $loggingProvider->getScheme();
-        $providerConfig = match ($providerName) {
-            'sentry' => ['key' => $loggingProvider->getPassword(), 'projectId' => $loggingProvider->getUser() ?? '', 'host' => 'https://' . $loggingProvider->getHost()],
-            'logowl' => ['ticket' => $loggingProvider->getUser() ?? '', 'host' => $loggingProvider->getHost()],
-            default => ['key' => $loggingProvider->getHost()],
-        };
-    } catch (Throwable) {
-        $configChunks = \explode(";", ($providerConfig ?? ''));
-
-        $providerConfig = match ($providerName) {
-            'sentry' => ['key' => $configChunks[0], 'projectId' => $configChunks[1] ?? '', 'host' => '',],
-            'logowl' => ['ticket' => $configChunks[0] ?? '', 'host' => ''],
-            default => ['key' => $providerConfig],
-        };
+        $exporters[] = new Sentry(
+            dsn: 'https://' . $dsn->getPassword() . '@' . $dsn->getHost() . '/' . $dsn->getUser(),
+            environment: Http::isProduction() ? 'production' : 'staging',
+            release: (string) Http::getEnv('OPR_PROXY_VERSION') ?: 'UNKNOWN',
+            serverName: \gethostname() ?: null,
+            sampler: static fn (Span $span): bool => $span->get('error.publish') !== false,
+        );
+    } catch (Throwable $th) {
+        Console::warning('Invalid OPR_PROXY_LOGGING_CONFIG, Sentry reporting is disabled: ' . $th->getMessage());
     }
+}
 
-    $logger = null;
-
-    if (!empty($providerName) && is_array($providerConfig) && Logger::hasProvider($providerName)) {
-        $adapter = match ($providerName) {
-            'sentry' => new Sentry($providerConfig['projectId'] ?? '', $providerConfig['key'] ?? '', $providerConfig['host'] ?? ''),
-            'logowl' => new LogOwl($providerConfig['ticket'] ?? '', $providerConfig['host'] ?? ''),
-            'raygun' => new Raygun($providerConfig['key'] ?? ''),
-            'appsignal' => new AppSignal($providerConfig['key'] ?? ''),
-            default => throw new Exception('Provider "' . $providerName . '" not supported.')
-        };
-
-        $logger = new Logger($adapter);
-    }
-
-    return $logger;
-});
+Span::setExporters(...$exporters);
 
 $register->set('algorithm', function () {
     $algoType = Http::getEnv('OPR_PROXY_ALGORITHM', '');
@@ -128,7 +110,6 @@ $register->set('algorithm', function () {
 });
 
 // Setup Resources
-Http::setResource('logger', fn () => $register->get('logger'));
 Http::setResource('algorithm', fn () => $register->get('algorithm'));
 Http::setResource('state', fn () => createState(Http::getEnv('OPR_PROXY_CONNECTIONS_STATE', '') ?? ''));
 
@@ -204,8 +185,7 @@ Http::setResource('balancer', function (Algorithm $algorithm, Request $request, 
     return $group;
 }, ['algorithm', 'request', 'state']);
 
-$healthCheck = function (State $state, bool $firstCheck = false) use ($register): void {
-    $logger = $register->get('logger');
+$healthCheck = function (State $state, bool $firstCheck = false): void {
     $executors = $state->list(RESOURCE_EXECUTORS);
 
     $health = new Health();
@@ -226,7 +206,7 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
                 } else {
                     $message = $node->getState()['message'] ?? 'Unexpected error.';
                     $error = new Exception('Executor "' . $hostname . '" went offline: ' . $message, 500);
-                    logError($error, "healthCheckError", $logger, null);
+                    Report::error($error, 'healthcheck.error', ['executor.hostname' => $hostname]);
                 }
             }
 
@@ -273,47 +253,10 @@ $healthCheck = function (State $state, bool $firstCheck = false) use ($register)
         try {
             Client::fetch(Http::getEnv('OPR_PROXY_HEALTHCHECK_URL') ?? '');
         } catch (\Throwable $th) {
-            logError($th, 'healthCheckError', $logger, null);
+            Report::error($th, 'healthcheck.error');
         }
     }
 };
-
-function logError(Throwable $error, string $action, ?Logger $logger, Route $route = null): void
-{
-    Console::error('[Error] Type: ' . get_class($error));
-    Console::error('[Error] Message: ' . $error->getMessage());
-    Console::error('[Error] File: ' . $error->getFile());
-    Console::error('[Error] Line: ' . $error->getLine());
-
-    if ($logger) {
-        $version = (string) Http::getEnv('OPR_PROXY_VERSION') ?: 'UNKNOWN';
-
-        $log = new Log();
-        $log->setNamespace('proxy');
-        $log->setServer(\gethostname() ? \gethostname() : 'unknown');
-        $log->setVersion($version);
-        $log->setType(Log::TYPE_ERROR);
-        $log->setMessage($error->getMessage());
-
-        if ($route) {
-            $log->addTag('method', $route->getMethod());
-            $log->addTag('url', $route->getPath());
-        }
-
-        $log->addTag('code', $error->getCode());
-        $log->addTag('verboseType', get_class($error));
-        $log->addExtra('file', $error->getFile());
-        $log->addExtra('line', $error->getLine());
-        $log->addExtra('trace', $error->getTraceAsString());
-        // TODO: @Meldiron Uncomment, was warning: Undefined array key "file" in Sentry.php on line 68
-        // $log->addExtra('detailedTrace', $error->getTrace());
-        $log->setAction($action);
-        $log->setEnvironment(Http::isProduction() ? Log::ENVIRONMENT_PRODUCTION : Log::ENVIRONMENT_STAGING);
-
-        $responseCode = $logger->addLog($log);
-        Console::info('Proxy log pushed with status code: ' . $responseCode);
-    }
-}
 
 Http::init()
     ->inject('request')
@@ -527,18 +470,14 @@ Http::wildcard()
     });
 
 Http::error()
-    ->inject('utopia')
     ->inject('error')
-    ->inject('logger')
     ->inject('request')
     ->inject('response')
-    ->action(function (Http $utopia, throwable $error, ?Logger $logger, Request $request, Response $response) {
-        $route = $utopia->match($request);
-        try {
-            logError($error, "httpError", $logger, $route);
-        } catch (Throwable) {
-            Console::warning('Unable to send log message');
-        }
+    ->action(function (Throwable $error, Request $request, Response $response) {
+        Report::error($error, 'http.error', [
+            'http.method' => $request->getMethod(),
+            'http.path' => (string) \parse_url($request->getURI(), PHP_URL_PATH),
+        ]);
 
 
         $version = (string) Http::getEnv('OPR_PROXY_VERSION') ?: 'UNKNOWN';

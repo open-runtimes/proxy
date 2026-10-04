@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7177344c3bf678363f043dba55230a04",
+    "content-hash": "70c21afedcc066c8eec1b1b4af041a37",
     "packages": [
         {
             "name": "utopia-php/balancer",
@@ -242,60 +242,6 @@
             "time": "2024-07-02T15:08:46+00:00"
         },
         {
-            "name": "utopia-php/logger",
-            "version": "0.7.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/utopia-php/logger.git",
-                "reference": "c274a99096808e2c57bc9e9ddb28fa876c45bd55"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/logger/zipball/c274a99096808e2c57bc9e9ddb28fa876c45bd55",
-                "reference": "c274a99096808e2c57bc9e9ddb28fa876c45bd55",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=8.0"
-            },
-            "require-dev": {
-                "laravel/pint": "1.2.*",
-                "phpstan/phpstan": "1.9.x-dev",
-                "phpunit/phpunit": "^9.3",
-                "vimeo/psalm": "4.0.1"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Utopia\\Logger\\": "src/Logger"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "description": "Utopia Logger library is simple and lite library for logging information, such as errors or warnings. This library is aiming to be as simple and easy to learn and use.",
-            "keywords": [
-                "appsignal",
-                "errors",
-                "framework",
-                "logger",
-                "logging",
-                "logs",
-                "php",
-                "raygun",
-                "sentry",
-                "upf",
-                "utopia",
-                "warnings"
-            ],
-            "support": {
-                "issues": "https://github.com/utopia-php/logger/issues",
-                "source": "https://github.com/utopia-php/logger/tree/0.7.0"
-            },
-            "time": "2024-12-17T13:13:36+00:00"
-        },
-        {
             "name": "utopia-php/registry",
             "version": "0.6.0",
             "source": {
@@ -346,6 +292,46 @@
                 "source": "https://github.com/utopia-php/registry/tree/0.6.0"
             },
             "time": "2022-07-17T15:26:57+00:00"
+        },
+        {
+            "name": "utopia-php/span",
+            "version": "4.1.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/span.git",
+                "reference": "7969d920044c1e106d9eede414e2d6e8df206ff5"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/span/zipball/7969d920044c1e106d9eede414e2d6e8df206ff5",
+                "reference": "7969d920044c1e106d9eede414e2d6e8df206ff5",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.3"
+            },
+            "require-dev": {
+                "swoole/ide-helper": "^5.0"
+            },
+            "suggest": {
+                "ext-swoole": "Required for coroutine-based storage"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Utopia\\Span\\": "src/Span/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "Simple span tracing library for PHP with coroutine support",
+            "support": {
+                "issues": "https://github.com/utopia-php/span/issues",
+                "source": "https://github.com/utopia-php/span/tree/4.1.0"
+            },
+            "time": "2026-07-24T08:46:29+00:00"
         }
     ],
     "packages-dev": [
@@ -723,16 +709,11 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "1.8.11",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/phpstan/phpstan.git",
-                "reference": "46e223dd68a620da18855c23046ddb00940b4014"
-            },
+            "version": "1.12.34",
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/46e223dd68a620da18855c23046ddb00940b4014",
-                "reference": "46e223dd68a620da18855c23046ddb00940b4014",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/4dd89ca7aa30fdc6760be21550d583bcc32e8476",
+                "reference": "4dd89ca7aa30fdc6760be21550d583bcc32e8476",
                 "shasum": ""
             },
             "require": {
@@ -761,8 +742,11 @@
                 "static analysis"
             ],
             "support": {
+                "docs": "https://phpstan.org/user-guide/getting-started",
+                "forum": "https://github.com/phpstan/phpstan/discussions",
                 "issues": "https://github.com/phpstan/phpstan/issues",
-                "source": "https://github.com/phpstan/phpstan/tree/1.8.11"
+                "security": "https://github.com/phpstan/phpstan/security/policy",
+                "source": "https://github.com/phpstan/phpstan-src"
             },
             "funding": [
                 {
@@ -772,13 +756,9 @@
                 {
                     "url": "https://github.com/phpstan",
                     "type": "github"
-                },
-                {
-                    "url": "https://tidelift.com/funding/github/packagist/phpstan/phpstan",
-                    "type": "tidelift"
                 }
             ],
-            "time": "2022-10-24T15:45:13+00:00"
+            "time": "2026-07-28T10:04:39+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -2264,14 +2244,14 @@
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.0.0",
+        "php": ">=8.3.0",
         "ext-curl": "*",
         "ext-json": "*",
         "ext-swoole": "*"
     },
     "platform-dev": {},
     "platform-overrides": {
-        "php": "8.0"
+        "php": "8.3"
     },
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }

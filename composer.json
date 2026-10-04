@@ -20,27 +20,27 @@
         "test": "./vendor/bin/phpunit --configuration phpunit.xml --debug"
     },
     "require": {
-        "php": ">=8.0.0",
+        "php": ">=8.3.0",
         "ext-curl": "*",
         "ext-json": "*",
         "ext-swoole": "*",
         "utopia-php/framework": "0.34.*",
         "utopia-php/registry": "0.6.*",
         "utopia-php/cli": "0.13.*",
-        "utopia-php/logger": "0.7.*",
         "utopia-php/balancer": "0.4.*",
         "utopia-php/fetch": "^0.1.0",
-        "utopia-php/dsn": "0.2.1"
+        "utopia-php/dsn": "0.2.1",
+        "utopia-php/span": "^4.1"
     },
     "require-dev": {
         "swoole/ide-helper": "4.8.5",
         "phpunit/phpunit": "^9.3",
         "laravel/pint": "1.2.*",
-        "phpstan/phpstan": "1.8.*"
+        "phpstan/phpstan": "1.12.*"
     },
     "config": {
         "platform": {
-            "php": "8.0"
+            "php": "8.3"
         }
     }
 }

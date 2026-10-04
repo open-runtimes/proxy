@@ -167,7 +167,7 @@ class Client
     }
 
     /**
-     * @return array<string,mixed>
+     * @return array<int|string,mixed>
      */
     public function parseCookie(string $cookie): array
     {
